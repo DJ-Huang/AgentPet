@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld("petBridge", {
   onState: (handler) => {
     ipcRenderer.on("pet:state", (_event, data) => handler(data));
   },
+  onEffects: (handler) => {
+    ipcRenderer.on("pet:effects", (_event, effects) => handler(effects));
+  },
+  onLanguage: (handler) => {
+    ipcRenderer.on("pet:language", (_event, language) => handler(language));
+  },
+  onScale: (handler) => {
+    ipcRenderer.on("pet:scale", (_event, scale) => handler(scale));
+  },
   clipEnded: (state) => ipcRenderer.send("pet:clip-ended", state),
   setIgnoreMouse: (ignore) => ipcRenderer.send("pet:ignore-mouse", ignore),
   scaleBy: (delta) => ipcRenderer.send("pet:scale-by", delta),
@@ -20,6 +29,9 @@ contextBridge.exposeInMainWorld("petBridge", {
   addClipFiles: (state) => ipcRenderer.invoke("clips:add-files", state),
   updateClipState: (state, patch) => ipcRenderer.invoke("clips:update", state, patch),
   generateClipMask: (state, index) => ipcRenderer.invoke("clips:generate-mask", state, index),
+  updateMaskEffects: (patch) => ipcRenderer.invoke("effects:update", patch),
+  updateLanguage: (language) => ipcRenderer.invoke("settings:update-language", language),
+  updateScale: (percent) => ipcRenderer.invoke("settings:update-scale", percent),
   restoreClipState: (state) => ipcRenderer.invoke("clips:restore", state),
   onClipConfig: (handler) => {
     ipcRenderer.on("clips:updated", (_event, data) => handler(data));

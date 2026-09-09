@@ -10,12 +10,28 @@
   const maskCanvas = document.createElement("canvas");
   const maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
   const maskImages = new Map();
+  const DEFAULT_EFFECTS = { edgeFadePercent: 12, overallOpacity: 80 };
+  const TEXT = {
+    "zh-CN": {
+      activity: "活动",
+      untitled: "未命名任务",
+      states: { idle: "空闲", thinking: "思考中", working: "工作中", waiting: "等待操作", review: "完成", failed: "执行失败" },
+    },
+    en: {
+      activity: "Activity",
+      untitled: "Untitled Task",
+      states: { idle: "Idle", thinking: "Thinking", working: "Working", waiting: "Awaiting Input", review: "Done", failed: "Failed" },
+    },
+  };
 
   let activeIndex = 0;
   let currentState = null;
   let switching = false;
   let queued = null;
+  let pendingState = null;
   let manifest = { clips: {}, files: {}, missing: {} };
+  let language = "zh-CN";
+  let currentThreads = [];
   let lastPick = {};
   let seqIndex = {};
   let ignoreMouse = true;
@@ -24,6 +40,21 @@
   const stage = document.getElementById("stage");
   const sessionList = document.getElementById("session-list");
   const sessionsPanel = document.getElementById("sessions");
+  const activityTitle = document.getElementById("activity-title");
+
+  function uiText(key) {
+    return TEXT[language]?.[key] ?? TEXT["zh-CN"][key] ?? key;
+  }
+
+  function stateLabel(state) {
+    return TEXT[language]?.states?.[state] || state;
+  }
+
+  function applyLanguage(nextLanguage) {
+    language = nextLanguage === "en" ? "en" : "zh-CN";
+    document.documentElement.lang = language;
+    if (activityTitle) activityTitle.textContent = uiText("activity");
+  }
 
   function urlsFor(state) {
     const value = manifest.files?.[state];
@@ -34,6 +65,20 @@
 
   function maskFor(state, videoUrl) {
     return manifest.masks?.[state]?.[videoUrl] || "";
+  }
+
+  function maskEffects() {
+    const effects = manifest.effects || {};
+    const edgeFadePercent = Number(effects.edgeFadePercent);
+    const overallOpacity = Number(effects.overallOpacity);
+    return {
+      edgeFadePercent: Number.isFinite(edgeFadePercent)
+        ? Math.max(0, Math.min(50, edgeFadePercent))
+        : DEFAULT_EFFECTS.edgeFadePercent,
+      overallOpacity: Number.isFinite(overallOpacity)
+        ? Math.max(0, Math.min(100, overallOpacity))
+        : DEFAULT_EFFECTS.overallOpacity,
+    };
   }
 
   function clipMeta(state) {
@@ -61,19 +106,23 @@
     return url;
   }
 
-  function fileFor(state, options) {
+  function playableStateFor(state) {
     const seen = new Set();
     let cursor = state;
     while (cursor && !seen.has(cursor)) {
       seen.add(cursor);
-    if (urlsFor(cursor).length) {
-      const url = pickUrl(cursor, options);
-      return { state: cursor, url, mask: maskFor(cursor, url) };
-    }
+      if (urlsFor(cursor).length) return cursor;
       cursor = FALLBACK_MAP[cursor] || "idle";
     }
-    const url = pickUrl("idle", options);
-    return { state: "idle", url, mask: maskFor("idle", url) };
+    return "idle";
+  }
+
+  function fileFor(state, options) {
+    const resolvedState = playableStateFor(state);
+    const url = pickUrl(resolvedState, options);
+    if (url) return { state: resolvedState, url, mask: maskFor(resolvedState, url) };
+    const fallbackUrl = pickUrl("idle", options);
+    return { state: "idle", url: fallbackUrl, mask: maskFor("idle", fallbackUrl) };
   }
 
   function preloadMask(url) {
@@ -83,9 +132,58 @@
     maskImages.set(url, image);
   }
 
+  function edgeFadeMasks(fade) {
+    if (fade <= 0) return [];
+    const stop = `${fade}%`;
+    return [
+      `linear-gradient(to right, rgba(0, 0, 0, 0) 0%, #000 ${stop}, #000 calc(100% - ${stop}), rgba(0, 0, 0, 0) 100%)`,
+      `linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, #000 ${stop}, #000 calc(100% - ${stop}), rgba(0, 0, 0, 0) 100%)`,
+    ];
+  }
+
+  function renderedVideoRect(video) {
+    const elementRect = video.getBoundingClientRect();
+    if (!video.videoWidth || !video.videoHeight || !elementRect.width || !elementRect.height) {
+      return elementRect;
+    }
+    const contentScale = Math.min(elementRect.width / video.videoWidth, elementRect.height / video.videoHeight);
+    const width = video.videoWidth * contentScale;
+    const height = video.videoHeight * contentScale;
+    return {
+      left: elementRect.left + (elementRect.width - width) / 2,
+      top: elementRect.top + (elementRect.height - height) / 2,
+      right: elementRect.left + (elementRect.width + width) / 2,
+      bottom: elementRect.top + (elementRect.height + height) / 2,
+      width,
+      height,
+    };
+  }
+
+  function applyVideoEffects(video) {
+    const effects = maskEffects();
+    const url = video.getAttribute("data-mask-src") || "";
+    const layers = [url ? `url("${url}")` : "", ...edgeFadeMasks(effects.edgeFadePercent)].filter(Boolean);
+    const maskImage = layers.join(", ");
+    const contentRect = renderedVideoRect(video);
+    const maskSize = Array(layers.length).fill(`${contentRect.width}px ${contentRect.height}px`).join(", ");
+
+    video.style.webkitMaskImage = maskImage;
+    video.style.maskImage = maskImage;
+    video.style.webkitMaskSize = maskSize;
+    video.style.maskSize = maskSize;
+    video.style.webkitMaskComposite = Array(Math.max(0, layers.length - 1)).fill("source-in").join(", ");
+    video.style.maskComposite = Array(Math.max(0, layers.length - 1)).fill("intersect").join(", ");
+    video.style.setProperty("--overall-opacity", String(effects.overallOpacity / 100));
+    video.style.visibility = effects.overallOpacity === 0 ? "hidden" : "";
+  }
+
+  function refreshVideoEffects() {
+    videos.forEach(applyVideoEffects);
+  }
+
   function setVideoMask(video, url) {
-    video.style.webkitMaskImage = url ? `url("${url}")` : "";
     video.setAttribute("data-mask-src", url || "");
+    applyVideoEffects(video);
     preloadMask(url);
   }
 
@@ -100,27 +198,50 @@
       video.removeAttribute("data-src");
       video.removeAttribute("data-mask-src");
       video.style.webkitMaskImage = "";
+      video.style.maskImage = "";
+      video.style.webkitMaskComposite = "";
+      video.style.maskComposite = "";
+      video.style.webkitMaskSize = "";
+      video.style.maskSize = "";
+      video.style.removeProperty("--overall-opacity");
+      video.style.visibility = "";
       video.load();
       video.classList.remove("active");
     });
     currentState = null;
+    pendingState = null;
   }
 
-  function playState(state, { nextClip } = {}) {
+  function playState(state, { nextClip, afterEnded } = {}) {
     if (switching) {
       queued = state;
       return;
     }
-    const target = fileFor(state, { advance: Boolean(nextClip) });
     const active = videos[activeIndex];
-    if (
-      !nextClip &&
-      currentState === target.state &&
-      active.src &&
-      active.getAttribute("data-src") === target.url
-    ) {
+    const desiredState = playableStateFor(state);
+    if (!nextClip && currentState === desiredState && active.src && !active.ended) {
+      pendingState = null;
+      const currentMeta = clipMeta(currentState);
+      const rotates = Boolean(currentMeta.loop) && currentMeta.pick === "sequence" && urlsFor(currentState).length > 1;
+      active.loop = Boolean(currentMeta.loop) && !rotates;
       return;
     }
+    if (
+      !nextClip &&
+      !afterEnded &&
+      currentState !== null &&
+      desiredState !== currentState &&
+      active.src &&
+      !active.ended
+    ) {
+      pendingState = state;
+      active.loop = false;
+      if (active.paused) active.play().catch(() => playState(state, { afterEnded: true }));
+      return;
+    }
+
+    pendingState = null;
+    const target = fileFor(state, { advance: Boolean(nextClip) });
 
     const nextIndex = 1 - activeIndex;
     const hidden = videos[nextIndex];
@@ -154,6 +275,12 @@
     };
 
     hidden.onended = () => {
+      if (pendingState) {
+        const next = pendingState;
+        pendingState = null;
+        playState(next, { afterEnded: true });
+        return;
+      }
       if (rotate) {
         playState(target.state, { nextClip: true });
         return;
@@ -198,7 +325,7 @@
   function hitPet(clientX, clientY) {
     const video = videos[activeIndex];
     if (!video) return false;
-    const rect = video.getBoundingClientRect();
+    const rect = renderedVideoRect(video);
     if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
       return false;
     }
@@ -213,7 +340,7 @@
   function sampleOpaque(clientX, clientY) {
     const video = videos[activeIndex];
     if (!video || !video.videoWidth || !video.videoHeight) return false;
-    const rect = video.getBoundingClientRect();
+    const rect = renderedVideoRect(video);
     if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
       return false;
     }
@@ -225,6 +352,15 @@
     const y = Math.floor(((clientY - rect.top) / rect.height) * video.videoHeight);
     const pixel = sampleCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data;
     if (pixel[3] <= 20) return false;
+    const effects = maskEffects();
+    const fadeX = effects.edgeFadePercent * video.videoWidth / 100;
+    const fadeY = effects.edgeFadePercent * video.videoHeight / 100;
+    if (fadeX > 0 || fadeY > 0) {
+      const xT = fadeX > 0 ? Math.min(1, Math.max(0, Math.min(x, video.videoWidth - 1 - x) / fadeX)) : 1;
+      const yT = fadeY > 0 ? Math.min(1, Math.max(0, Math.min(y, video.videoHeight - 1 - y) / fadeY)) : 1;
+      const edgeAlpha = Math.min(xT * xT * (3 - 2 * xT), yT * yT * (3 - 2 * yT)) * effects.overallOpacity;
+      if (edgeAlpha <= 20) return false;
+    }
     const maskUrl = video.getAttribute("data-mask-src");
     const mask = maskUrl ? maskImages.get(maskUrl) : null;
     if (!mask || !mask.complete || !mask.naturalWidth) return true;
@@ -232,7 +368,7 @@
     maskCanvas.height = video.videoHeight;
     maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     maskCtx.drawImage(mask, 0, 0, maskCanvas.width, maskCanvas.height);
-    return maskCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data[3] > 20;
+    return maskCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data[3] * effects.overallOpacity / 100 > 20;
   }
 
   function syncPanelHeight() {
@@ -244,6 +380,7 @@
   function renderSessions(threads) {
     if (!sessionList) return;
     const rows = Array.isArray(threads) ? threads : [];
+    currentThreads = rows;
     if (sessionsPanel) sessionsPanel.classList.toggle("visible", rows.length > 0);
     if (rows.length === 0) {
       sessionList.replaceChildren();
@@ -266,11 +403,11 @@
 
         const title = document.createElement("span");
         title.className = "session-title";
-        title.textContent = thread.title || "未命名";
+        title.textContent = thread.title || uiText("untitled");
 
         const label = document.createElement("span");
         label.className = "session-label";
-        label.textContent = thread.pinned ? "钉住" : thread.label || "";
+        label.textContent = stateLabel(thread.state);
 
         row.append(dot, title, label);
         row.addEventListener("pointerdown", (event) => {
@@ -346,24 +483,42 @@
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       if (window.petBridge) {
-        window.petBridge.scaleBy(event.deltaY > 0 ? -0.1 : 0.1);
+        window.petBridge.scaleBy(event.deltaY > 0 ? -0.01 : 0.01);
       }
     },
     { passive: false },
   );
 
+  videos.forEach((video) => {
+    video.addEventListener("loadedmetadata", () => applyVideoEffects(video));
+  });
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(refreshVideoEffects).observe(stage);
+  }
+
   if (window.petBridge) {
     window.petBridge.onInit((data) => {
       manifest = data || manifest;
+      applyLanguage(data?.language || language);
+      refreshVideoEffects();
       lastPick = {};
       seqIndex = {};
       currentState = null;
+      pendingState = null;
       playState(data?.state || "idle");
       renderSessions(data?.threads);
     });
     window.petBridge.onState((data) => {
       playState(data?.state || "idle");
       renderSessions(data?.threads);
+    });
+    window.petBridge.onEffects((effects) => {
+      manifest = { ...manifest, effects: effects || DEFAULT_EFFECTS };
+      refreshVideoEffects();
+    });
+    window.petBridge.onLanguage((nextLanguage) => {
+      applyLanguage(nextLanguage);
+      renderSessions(currentThreads);
     });
   }
 })();

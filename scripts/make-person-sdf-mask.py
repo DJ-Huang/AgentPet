@@ -4,6 +4,7 @@ import argparse
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 from PIL import Image
 from rembg import new_session, remove
 
@@ -26,7 +27,10 @@ def main() -> None:
     capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     union = np.zeros((height, width), dtype=np.uint8)
-    session = new_session("u2net_human_seg")
+    available = ort.get_available_providers()
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if "CUDAExecutionProvider" in available else ["CPUExecutionProvider"]
+    session = new_session("u2net_human_seg", providers=providers)
+    active_providers = session.inner_session.get_providers()
     frame_index = 0
     sampled = 0
     while True:
@@ -55,9 +59,11 @@ def main() -> None:
     )
     outside_distance = cv2.distanceTransform(1 - subject, cv2.DIST_L2, 5)
     normalized = np.clip(1.0 - outside_distance / args.fade_px, 0.0, 1.0)
-    alpha_sdf = np.round(
+    subject_alpha = np.round(
         255.0 * (normalized * normalized * (3.0 - 2.0 * normalized))
     ).astype(np.uint8)
+
+    alpha_sdf = subject_alpha
     # White RGB plus the distance field in alpha is both easy to inspect and
     # directly consumable by Chromium's CSS mask-image property.
     rgba_mask = np.dstack((
@@ -68,7 +74,10 @@ def main() -> None:
     ))
     if not cv2.imwrite(args.output, rgba_mask):
         raise RuntimeError(f"Cannot write mask: {args.output}")
-    print(f"frames={frame_index}; sampled={sampled}; output={args.output}")
+    print(
+        f"frames={frame_index}; sampled={sampled}; providers={','.join(active_providers)}; "
+        f"fade={args.fade_px}px; output={args.output}"
+    )
 
 
 if __name__ == "__main__":

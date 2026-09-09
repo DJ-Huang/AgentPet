@@ -43,11 +43,13 @@
         pointer-events: none;
         -webkit-mask-position: center;
         -webkit-mask-repeat: no-repeat;
-        -webkit-mask-size: 100% 100%;
         -webkit-mask-mode: alpha;
+        mask-position: center;
+        mask-repeat: no-repeat;
+        mask-mode: alpha;
       }
       video.active {
-        opacity: 1;
+        opacity: var(--overall-opacity, 1);
       }
       #sessions {
         display: none;
@@ -135,7 +137,7 @@
         <video id="video-b" muted playsinline preload="auto"></video>
       </div>
       <div id="sessions">
-        <h2>活动</h2>
+        <h2 id="activity-title">活动</h2>
         <div id="session-list"></div>
       </div>
     </div>

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>桌宠视频设置</title>
+    <title>桌宠设置</title>
     <style>
       html,
       body {
@@ -32,6 +32,58 @@
       }
       .header-actions {
         margin: 8px 0 0;
+      }
+      .tabs {
+        display: flex;
+        gap: 6px;
+        margin-top: 12px;
+      }
+      .tab.active {
+        background: rgba(94, 200, 227, 0.18);
+        border-color: rgba(94, 200, 227, 0.4);
+      }
+      .tab-panel[hidden] {
+        display: none;
+      }
+      .settings-card,
+      .effects-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .effect-row {
+        display: grid;
+        grid-template-columns: 112px 1fr 56px;
+        align-items: center;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .effect-row output {
+        text-align: right;
+        color: rgba(255, 255, 255, 0.72);
+      }
+      .effect-help {
+        margin: 4px 0 0;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .setting-row {
+        display: grid;
+        grid-template-columns: 112px minmax(160px, 240px);
+        align-items: center;
+        gap: 10px;
+      }
+      .setting-control {
+        display: grid;
+        grid-template-columns: 1fr 56px;
+        align-items: center;
+        gap: 10px;
+      }
+      .setting-control output {
+        text-align: right;
+        color: rgba(255, 255, 255, 0.72);
       }
       main {
         display: flex;
@@ -124,11 +176,51 @@
   </head>
   <body>
     <header>
-      <h1>状态视频</h1>
-      <p class="hint">每个状态可添加多个本地视频。可为单个视频生成角色范围 Mask，播放时自动应用；只保存路径，不会拷贝视频。</p>
-      <p class="header-actions"><button type="button" id="restore-all">全部恢复默认</button></p>
+      <h1 data-i18n="title">桌宠设置</h1>
+      <p class="hint" data-i18n="subtitle">配置通用选项、状态视频和显示效果。</p>
+      <p class="header-actions"><button type="button" id="restore-all" data-i18n="restoreAll">全部恢复默认</button></p>
+      <nav class="tabs" aria-label="设置分类" data-i18n-aria-label="settingsCategory">
+        <button class="tab active" type="button" data-tab="general" data-i18n="generalTab">通用设置</button>
+        <button class="tab" type="button" data-tab="videos" data-i18n="videosTab">状态视频</button>
+        <button class="tab" type="button" data-tab="effects" data-i18n="effectsTab">显示效果</button>
+      </nav>
     </header>
-    <main id="states"></main>
+    <main id="general" class="tab-panel">
+      <section class="settings-card">
+        <div class="setting-row">
+          <label for="language" data-i18n="language">界面语言</label>
+          <select id="language">
+            <option value="zh-CN">简体中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="window-scale" data-i18n="windowScale">桌宠缩放</label>
+          <div class="setting-control">
+            <input id="window-scale" type="range" min="10" max="200" step="1" />
+            <output id="window-scale-value"></output>
+          </div>
+        </div>
+        <p class="effect-help" data-i18n="windowScaleHelp">可在 10%–200% 之间连续调节，也可按住 Ctrl/Command 滚动鼠标滚轮。</p>
+      </section>
+    </main>
+    <main id="states" class="tab-panel" hidden></main>
+    <main id="effects" class="tab-panel" hidden>
+      <section class="effects-card">
+        <div class="effect-row">
+          <label for="edge-fade-percent" data-i18n="edgeFade">四周羽化</label>
+          <input id="edge-fade-percent" type="range" min="0" max="50" step="1" />
+          <output id="edge-fade-percent-value"></output>
+        </div>
+        <p class="effect-help" data-i18n="edgeFadeHelp">最外沿透明度固定为 0，向内渐变至完全可见；百分比控制渐变宽度，缩放后效果保持一致。</p>
+        <div class="effect-row">
+          <label for="overall-opacity" data-i18n="overallOpacity">整体透明度</label>
+          <input id="overall-opacity" type="range" min="0" max="100" step="1" />
+          <output id="overall-opacity-value"></output>
+        </div>
+        <p class="effect-help" data-i18n="overallOpacityHelp">100% 完全可见，0% 完全看不到视频。默认 80%。</p>
+      </section>
+    </main>
     <script src="./settings.js"></script>
   </body>
 </html>

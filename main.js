@@ -9,7 +9,7 @@ const { PetStateMachine } = require("./lib/state-machine");
 const { createStateServer } = require("./lib/http-server");
 const { createJsonlWatcher } = require("./lib/jsonl-watcher");
 const { createSessionCatalog, TITLE_LIMIT } = require("./lib/session-catalog");
-const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, restoreClipState } = require("./lib/clip-config");
+const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, updateMaskEffects, restoreClipState } = require("./lib/clip-config");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
@@ -17,10 +17,9 @@ const PET_DIR = path.join(__dirname, "assets", "pet");
 const SETTINGS_FILE = path.join(app.getPath("userData"), "window-position.json");
 const CLIP_CONFIG_FILE = path.join(app.getPath("userData"), "clip-config.json");
 const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
-const SCALE_MIN = 0.25;
-const SCALE_MAX = 3;
-const SCALE_STEP = 0.1;
-const SCALE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+const SCALE_MIN = 0.1;
+const SCALE_MAX = 2;
+const SCALE_STEP = 0.01;
 const THREAD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let mainWindow = null;
@@ -31,10 +30,72 @@ let jsonlWatcher = null;
 let sessionCatalog = null;
 let machine = null;
 let scale = 0.5;
+let language = "zh-CN";
 let dragOffset = null;
 let dragTimer = null;
 let panelHeight = 0;
 const maskJobs = new Map();
+
+const TEXT = {
+  "zh-CN": {
+    noActivity: "暂无活动",
+    status: "状态",
+    sessions: "Codex 任务",
+    followLatest: "跟随最近活动",
+    reset: "重置为空闲状态",
+    scale: "缩放",
+    zoomIn: "放大",
+    zoomOut: "缩小",
+    hide: "隐藏窗口",
+    show: "显示窗口",
+    settings: "设置…",
+    reload: "重新加载视频",
+    quit: "退出",
+    settingsTitle: "桌宠设置",
+    chooseVideo: "选择视频",
+    video: "视频",
+    untitled: "未命名任务",
+    maskStartFailed: "无法启动 Mask 生成器",
+    maskFailed: "Mask 生成失败",
+    clipNotFound: "找不到要生成 Mask 的视频",
+    states: { idle: "空闲", thinking: "思考中", working: "工作中", waiting: "等待操作", review: "完成", failed: "执行失败" },
+  },
+  en: {
+    noActivity: "No activity",
+    status: "Status",
+    sessions: "Codex Tasks",
+    followLatest: "Follow Latest Activity",
+    reset: "Reset to Idle",
+    scale: "Scale",
+    zoomIn: "Zoom In",
+    zoomOut: "Zoom Out",
+    hide: "Hide Window",
+    show: "Show Window",
+    settings: "Settings…",
+    reload: "Reload Videos",
+    quit: "Quit",
+    settingsTitle: "Desktop Pet Settings",
+    chooseVideo: "Choose Videos",
+    video: "Videos",
+    untitled: "Untitled Task",
+    maskStartFailed: "Unable to start the Mask generator",
+    maskFailed: "Mask generation failed",
+    clipNotFound: "The video selected for Mask generation could not be found",
+    states: { idle: "Idle", thinking: "Thinking", working: "Working", waiting: "Awaiting Input", review: "Done", failed: "Failed" },
+  },
+};
+
+function normalizeLanguage(value) {
+  return value === "en" ? "en" : "zh-CN";
+}
+
+function text(key) {
+  return TEXT[language]?.[key] ?? TEXT["zh-CN"][key] ?? key;
+}
+
+function stateText(state) {
+  return TEXT[language]?.states?.[state] || state;
+}
 
 function loadManifest() {
   const resolved = loadClipConfig({ petDir: PET_DIR, userConfigPath: CLIP_CONFIG_FILE });
@@ -44,6 +105,8 @@ function loadManifest() {
     threads: machine ? machine.threadList() : [],
     drivingId: machine ? machine.snapshot().drivingId : null,
     pinnedId: machine ? machine.pinnedId : null,
+    language,
+    scale,
   };
 }
 
@@ -51,6 +114,17 @@ function pushClipConfig(payload) {
   const data = payload || loadManifest();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("pet:init", { ...data, ...(machine ? machine.snapshot() : {}) });
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send("clips:updated", data);
+  }
+  return data;
+}
+
+function pushEffectConfig(payload) {
+  const data = payload || loadManifest();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pet:effects", data.effects);
   }
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send("clips:updated", data);
@@ -71,16 +145,23 @@ function runMaskGenerator(videoPath, outputPath) {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     const child = spawn(process.env.PYTHON || "python", [script, videoPath, outputPath], {
       windowsHide: true,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let errorText = "";
+    let outputText = "";
+    child.stdout.on("data", (chunk) => {
+      outputText = `${outputText}${chunk}`.slice(-2000);
+    });
     child.stderr.on("data", (chunk) => {
       errorText = `${errorText}${chunk}`.slice(-2000);
     });
-    child.once("error", (error) => reject(new Error(`无法启动 Mask 生成器：${error.message}`)));
+    child.once("error", (error) => reject(new Error(`${text("maskStartFailed")}: ${error.message}`)));
     child.once("close", (code) => {
-      if (code === 0 && fs.existsSync(outputPath)) resolve(outputPath);
-      else reject(new Error(`Mask 生成失败${errorText ? `：${errorText.trim()}` : ""}`));
+      if (code === 0 && fs.existsSync(outputPath)) {
+        console.log(`[codex-video-pet] mask generated: ${outputText.trim()}`);
+        resolve(outputPath);
+      }
+      else reject(new Error(`${text("maskFailed")}${errorText ? `: ${errorText.trim()}` : ""}`));
     });
   });
   maskJobs.set(key, job);
@@ -142,12 +223,18 @@ function applyWindowSize() {
 }
 
 function saveSettings() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const bounds = mainWindow.getBounds();
+  const existing = loadSettings();
+  const bounds = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(
     SETTINGS_FILE,
-    JSON.stringify({ x: bounds.x, y: bounds.y, scale, pinnedId: machine ? machine.pinnedId : null }),
+    JSON.stringify({
+      ...existing,
+      ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
+      scale,
+      language,
+      pinnedId: machine ? machine.pinnedId : existing.pinnedId || null,
+    }),
   );
 }
 
@@ -190,6 +277,9 @@ function setScale(next) {
   });
   saveSettings();
   rebuildTray();
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send("pet:scale", scale);
+  }
 }
 
 function sendState(snap) {
@@ -273,22 +363,23 @@ function rebuildTray() {
   if (!tray || !machine) return;
   const snap = machine.snapshot();
   const current = snap.state;
+  const separator = language === "en" ? ": " : "：";
   const states = ["idle", "thinking", "working", "waiting", "review", "failed"];
   const sessionItems =
     snap.threads.length === 0
-      ? [{ label: "暂无活动", enabled: false }]
+      ? [{ label: text("noActivity"), enabled: false }]
       : snap.threads.map((thread) => ({
-          label: `${thread.driving ? "▶ " : ""}${truncate(thread.title)}  · ${thread.label}`,
+          label: `${thread.driving ? "▶ " : ""}${truncate(thread.title || text("untitled"))}  · ${stateText(thread.state)}`,
           click: () => openCodexThread(thread.id),
         }));
   const template = [
-    { label: `状态：${current}`, enabled: false },
+    { label: `${text("status")}${separator}${stateText(current)}`, enabled: false },
     { type: "separator" },
     {
-      label: "Codex 会话",
+      label: text("sessions"),
       submenu: [
         {
-          label: "跟随最近活跃",
+          label: text("followLatest"),
           type: "radio",
           checked: !snap.pinnedId,
           click: () => {
@@ -302,7 +393,7 @@ function rebuildTray() {
     },
     { type: "separator" },
     ...states.map((state) => ({
-      label: state,
+      label: stateText(state),
       type: "radio",
       checked: current === state,
       click: () => {
@@ -311,31 +402,24 @@ function rebuildTray() {
     })),
     { type: "separator" },
     {
-      label: "复位待机",
+      label: text("reset"),
       click: () => machine.reset(),
     },
     {
-      label: `缩放 ${Math.round(scale * 100)}%`,
+      label: `${text("scale")} ${Math.round(scale * 100)}%`,
       submenu: [
         {
-          label: "放大",
+          label: text("zoomIn"),
           click: () => setScale(scale + SCALE_STEP),
         },
         {
-          label: "缩小",
+          label: text("zoomOut"),
           click: () => setScale(scale - SCALE_STEP),
         },
-        { type: "separator" },
-        ...SCALE_PRESETS.map((value) => ({
-          label: `${Math.round(value * 100)}%`,
-          type: "radio",
-          checked: Math.abs(scale - value) < 0.02,
-          click: () => setScale(value),
-        })),
       ],
     },
     {
-      label: mainWindow?.isVisible() ? "隐藏窗口" : "显示窗口",
+      label: mainWindow?.isVisible() ? text("hide") : text("show"),
       click: () => {
         if (!mainWindow) return;
         if (mainWindow.isVisible()) mainWindow.hide();
@@ -343,21 +427,21 @@ function rebuildTray() {
       },
     },
     {
-      label: "设置…",
+      label: text("settings"),
       click: () => createSettingsWindow(),
     },
     {
-      label: "重新加载切片",
+      label: text("reload"),
       click: () => {
         pushClipConfig();
         sendState();
       },
     },
     { type: "separator" },
-    { label: "退出", click: () => app.quit() },
+    { label: text("quit"), click: () => app.quit() },
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
-  tray.setToolTip(`Codex Video Pet · ${current}${snap.threads.find((row) => row.driving)?.title ? ` · ${snap.threads.find((row) => row.driving).title}` : ""}`);
+  tray.setToolTip(`Codex Video Pet · ${stateText(current)}${snap.threads.find((row) => row.driving)?.title ? ` · ${snap.threads.find((row) => row.driving).title}` : ""}`);
 }
 
 function createSettingsWindow() {
@@ -371,7 +455,7 @@ function createSettingsWindow() {
     height: 740,
     minWidth: 440,
     minHeight: 480,
-    title: "桌宠视频设置",
+    title: text("settingsTitle"),
     autoHideMenuBar: true,
     backgroundColor: "#1b1b1f",
     webPreferences: {
@@ -445,6 +529,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     app.setAppUserModelId("codex-video-pet");
+    language = normalizeLanguage(loadSettings().language);
     await startServices();
     createWindow();
     createTray();
@@ -455,9 +540,9 @@ if (!gotLock) {
   ipcMain.handle("clips:add-files", async (event, state) => {
     const parent = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(parent || settingsWindow, {
-      title: "选择视频",
+      title: text("chooseVideo"),
       properties: ["openFile", "multiSelections"],
-      filters: [{ name: "视频", extensions: ["mp4", "webm", "mov"] }],
+      filters: [{ name: text("video"), extensions: ["mp4", "webm", "mov"] }],
     });
     if (result.canceled) return loadManifest();
     return pushClipConfig(addClipFiles(PET_DIR, CLIP_CONFIG_FILE, state, result.filePaths));
@@ -469,9 +554,30 @@ if (!gotLock) {
 
   ipcMain.handle("clips:generate-mask", async (_event, state, index) => {
     const clip = clipFileAt(PET_DIR, CLIP_CONFIG_FILE, state, Number(index));
-    if (!clip?.exists) throw new Error("找不到要生成 Mask 的视频");
+    if (!clip?.exists) throw new Error(text("clipNotFound"));
     const outputPath = await runMaskGenerator(clip.abs, maskOutputPath(clip.abs));
     return pushClipConfig(setClipMask(PET_DIR, CLIP_CONFIG_FILE, state, Number(index), outputPath));
+  });
+
+  ipcMain.handle("effects:update", (_event, patch) => {
+    return pushEffectConfig(updateMaskEffects(PET_DIR, CLIP_CONFIG_FILE, patch || {}));
+  });
+
+  ipcMain.handle("settings:update-language", (_event, nextLanguage) => {
+    language = normalizeLanguage(nextLanguage);
+    saveSettings();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("pet:language", language);
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.setTitle(text("settingsTitle"));
+      settingsWindow.webContents.send("pet:language", language);
+    }
+    rebuildTray();
+    return loadManifest();
+  });
+
+  ipcMain.handle("settings:update-scale", (_event, percent) => {
+    setScale(Number(percent) / 100);
+    return loadManifest();
   });
 
   ipcMain.handle("clips:restore", (_event, state) => {
