@@ -7,53 +7,129 @@
   const videos = [videoA, videoB];
   const sampleCanvas = document.createElement("canvas");
   const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+  const maskCanvas = document.createElement("canvas");
+  const maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
+  const maskImages = new Map();
 
   let activeIndex = 0;
   let currentState = null;
   let switching = false;
   let queued = null;
   let manifest = { clips: {}, files: {}, missing: {} };
+  let lastPick = {};
+  let seqIndex = {};
   let ignoreMouse = true;
   let sampleRaf = 0;
   let dragging = false;
   const stage = document.getElementById("stage");
   const sessionList = document.getElementById("session-list");
+  const sessionsPanel = document.getElementById("sessions");
 
-  function fileFor(state) {
+  function urlsFor(state) {
+    const value = manifest.files?.[state];
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === "string" && value) return [value];
+    return [];
+  }
+
+  function maskFor(state, videoUrl) {
+    return manifest.masks?.[state]?.[videoUrl] || "";
+  }
+
+  function clipMeta(state) {
+    return manifest.clips[state] || { loop: true, pick: "random" };
+  }
+
+  function pickUrl(state, { advance } = {}) {
+    const urls = urlsFor(state);
+    if (!urls.length) return "";
+    const meta = clipMeta(state);
+    if (meta.pick === "sequence") {
+      if (!Number.isInteger(seqIndex[state]) || seqIndex[state] < 0) seqIndex[state] = 0;
+      if (advance) seqIndex[state] += 1;
+      const url = urls[seqIndex[state] % urls.length];
+      lastPick[state] = url;
+      return url;
+    }
+    if (urls.length === 1) {
+      lastPick[state] = urls[0];
+      return urls[0];
+    }
+    const pool = urls.filter((url) => url !== lastPick[state]);
+    const url = pool[Math.floor(Math.random() * pool.length)];
+    lastPick[state] = url;
+    return url;
+  }
+
+  function fileFor(state, options) {
     const seen = new Set();
     let cursor = state;
     while (cursor && !seen.has(cursor)) {
       seen.add(cursor);
-      if (manifest.files[cursor]) return { state: cursor, url: manifest.files[cursor] };
+    if (urlsFor(cursor).length) {
+      const url = pickUrl(cursor, options);
+      return { state: cursor, url, mask: maskFor(cursor, url) };
+    }
       cursor = FALLBACK_MAP[cursor] || "idle";
     }
-    return { state: "idle", url: manifest.files.idle || "" };
+    const url = pickUrl("idle", options);
+    return { state: "idle", url, mask: maskFor("idle", url) };
   }
 
-  function clipMeta(state) {
-    return manifest.clips[state] || { loop: true };
+  function preloadMask(url) {
+    if (!url || maskImages.has(url)) return;
+    const image = new Image();
+    image.src = url;
+    maskImages.set(url, image);
+  }
+
+  function setVideoMask(video, url) {
+    video.style.webkitMaskImage = url ? `url("${url}")` : "";
+    video.setAttribute("data-mask-src", url || "");
+    preloadMask(url);
   }
 
   function show(video) {
     videos.forEach((item) => item.classList.toggle("active", item === video));
   }
 
-  function playState(state) {
+  function stopPlayback() {
+    videos.forEach((video) => {
+      video.pause();
+      video.removeAttribute("src");
+      video.removeAttribute("data-src");
+      video.removeAttribute("data-mask-src");
+      video.style.webkitMaskImage = "";
+      video.load();
+      video.classList.remove("active");
+    });
+    currentState = null;
+  }
+
+  function playState(state, { nextClip } = {}) {
     if (switching) {
       queued = state;
       return;
     }
-    const target = fileFor(state);
+    const target = fileFor(state, { advance: Boolean(nextClip) });
     const active = videos[activeIndex];
-    if (currentState === target.state && active.src) return;
+    if (
+      !nextClip &&
+      currentState === target.state &&
+      active.src &&
+      active.getAttribute("data-src") === target.url
+    ) {
+      return;
+    }
 
     const nextIndex = 1 - activeIndex;
     const hidden = videos[nextIndex];
     const meta = clipMeta(target.state);
+    const rotate = Boolean(meta.loop) && meta.pick === "sequence" && urlsFor(target.state).length > 1;
     switching = true;
 
     const finish = () => {
-      hidden.loop = Boolean(meta.loop);
+      hidden.loop = Boolean(meta.loop) && !rotate;
       hidden.muted = true;
       const playPromise = hidden.play();
       const go = () => {
@@ -78,6 +154,10 @@
     };
 
     hidden.onended = () => {
+      if (rotate) {
+        playState(target.state, { nextClip: true });
+        return;
+      }
       if (!meta.loop && window.petBridge) {
         window.petBridge.clipEnded(target.state);
       }
@@ -85,6 +165,7 @@
 
     if (!target.url) {
       switching = false;
+      stopPlayback();
       return;
     }
 
@@ -110,6 +191,7 @@
     hidden.addEventListener("error", onError, { once: true });
     hidden.src = target.url;
     hidden.setAttribute("data-src", target.url);
+    setVideoMask(hidden, target.mask);
     hidden.load();
   }
 
@@ -142,17 +224,30 @@
     const x = Math.floor(((clientX - rect.left) / rect.width) * video.videoWidth);
     const y = Math.floor(((clientY - rect.top) / rect.height) * video.videoHeight);
     const pixel = sampleCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data;
-    return pixel[3] > 20;
+    if (pixel[3] <= 20) return false;
+    const maskUrl = video.getAttribute("data-mask-src");
+    const mask = maskUrl ? maskImages.get(maskUrl) : null;
+    if (!mask || !mask.complete || !mask.naturalWidth) return true;
+    maskCanvas.width = video.videoWidth;
+    maskCanvas.height = video.videoHeight;
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    maskCtx.drawImage(mask, 0, 0, maskCanvas.width, maskCanvas.height);
+    return maskCtx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data[3] > 20;
+  }
+
+  function syncPanelHeight() {
+    if (!window.petBridge) return;
+    const height = sessionsPanel && sessionsPanel.classList.contains("visible") ? sessionsPanel.offsetHeight : 0;
+    window.petBridge.setPanelHeight(height);
   }
 
   function renderSessions(threads) {
     if (!sessionList) return;
     const rows = Array.isArray(threads) ? threads : [];
+    if (sessionsPanel) sessionsPanel.classList.toggle("visible", rows.length > 0);
     if (rows.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "session-empty";
-      empty.textContent = "暂无会话";
-      sessionList.replaceChildren(empty);
+      sessionList.replaceChildren();
+      requestAnimationFrame(() => requestAnimationFrame(syncPanelHeight));
       return;
     }
     sessionList.replaceChildren(
@@ -183,14 +278,16 @@
         });
         row.addEventListener("click", (event) => {
           event.stopPropagation();
-          if (window.petBridge) window.petBridge.pinThread(thread.id);
+          if (window.petBridge) window.petBridge.openThread(thread.id);
         });
         return row;
       }),
     );
+    requestAnimationFrame(() => requestAnimationFrame(syncPanelHeight));
   }
 
   function overPanel(event) {
+    if (!sessionsPanel || !sessionsPanel.classList.contains("visible")) return false;
     return Boolean(event.target.closest && event.target.closest("#sessions"));
   }
 
@@ -258,6 +355,9 @@
   if (window.petBridge) {
     window.petBridge.onInit((data) => {
       manifest = data || manifest;
+      lastPick = {};
+      seqIndex = {};
+      currentState = null;
       playState(data?.state || "idle");
       renderSessions(data?.threads);
     });

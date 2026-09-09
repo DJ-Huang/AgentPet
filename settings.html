@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>桌宠视频设置</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #1b1b1f;
+        color: #ececec;
+        font-family: "Segoe UI", sans-serif;
+        font-size: 13px;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 16px 20px 12px;
+        background: #1b1b1f;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .hint {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+      }
+      .header-actions {
+        margin: 8px 0 0;
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px 20px 24px;
+      }
+      .state-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .state-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .state-head h2 {
+        margin: 0;
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .state-id {
+        color: rgba(255, 255, 255, 0.4);
+        font-weight: 400;
+        font-size: 11px;
+      }
+      select,
+      button {
+        font: inherit;
+        color: inherit;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.25);
+      }
+      select {
+        padding: 4px 8px;
+      }
+      button {
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      button.primary {
+        background: rgba(94, 200, 227, 0.18);
+        border-color: rgba(94, 200, 227, 0.4);
+      }
+      .clip-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .clip-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 28px;
+        padding: 4px 6px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .clip-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .clip-row.missing .clip-name {
+        color: #dc5858;
+      }
+      .clip-actions {
+        display: flex;
+        gap: 4px;
+        flex: 0 0 auto;
+      }
+      .clip-actions button {
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+      .empty {
+        padding: 8px 6px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>状态视频</h1>
+      <p class="hint">每个状态可添加多个本地视频。可为单个视频生成角色范围 Mask，播放时自动应用；只保存路径，不会拷贝视频。</p>
+      <p class="header-actions"><button type="button" id="restore-all">全部恢复默认</button></p>
+    </header>
+    <main id="states"></main>
+    <script src="./settings.js"></script>
+  </body>
+</html>

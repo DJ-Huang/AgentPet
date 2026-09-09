@@ -41,18 +41,26 @@
         background: transparent;
         opacity: 0;
         pointer-events: none;
+        -webkit-mask-position: center;
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: 100% 100%;
+        -webkit-mask-mode: alpha;
       }
       video.active {
         opacity: 1;
       }
       #sessions {
-        flex: 0 0 188px;
+        display: none;
+        flex: 0 0 auto;
         box-sizing: border-box;
         padding: 8px 10px 10px;
         background: rgba(18, 18, 20, 0.82);
         color: #ececec;
         pointer-events: auto;
         cursor: default;
+      }
+      #sessions.visible {
+        display: block;
       }
       #sessions h2 {
         margin: 0 0 6px;
@@ -127,7 +135,7 @@
         <video id="video-b" muted playsinline preload="auto"></video>
       </div>
       <div id="sessions">
-        <h2>CODEX 会话</h2>
+        <h2>活动</h2>
         <div id="session-list"></div>
       </div>
     </div>

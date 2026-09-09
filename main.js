@@ -1,24 +1,30 @@
 "use strict";
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, shell } = require("electron");
+const { spawn } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { PetStateMachine } = require("./lib/state-machine");
 const { createStateServer } = require("./lib/http-server");
 const { createJsonlWatcher } = require("./lib/jsonl-watcher");
-const { createSessionCatalog, LIST_LIMIT } = require("./lib/session-catalog");
+const { createSessionCatalog, TITLE_LIMIT } = require("./lib/session-catalog");
+const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, restoreClipState } = require("./lib/clip-config");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 const PET_DIR = path.join(__dirname, "assets", "pet");
 const SETTINGS_FILE = path.join(app.getPath("userData"), "window-position.json");
+const CLIP_CONFIG_FILE = path.join(app.getPath("userData"), "clip-config.json");
+const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
 const SCALE_MIN = 0.25;
 const SCALE_MAX = 3;
 const SCALE_STEP = 0.1;
 const SCALE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-const PANEL_HEIGHT = 188;
+const THREAD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let mainWindow = null;
+let settingsWindow = null;
 let tray = null;
 let httpServer = null;
 let jsonlWatcher = null;
@@ -27,28 +33,13 @@ let machine = null;
 let scale = 0.5;
 let dragOffset = null;
 let dragTimer = null;
+let panelHeight = 0;
+const maskJobs = new Map();
 
 function loadManifest() {
-  const manifestPath = path.join(PET_DIR, "manifest.json");
-  const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  const clips = raw.clips || {};
-  const files = {};
-  const missing = {};
-  for (const [name, clip] of Object.entries(clips)) {
-    const filePath = path.join(PET_DIR, clip.file);
-    if (fs.existsSync(filePath)) {
-      files[name] = pathToFileUrl(filePath);
-    } else {
-      missing[name] = clip.file;
-    }
-  }
-  const size = Array.isArray(raw.size) ? raw.size : [360, 360];
+  const resolved = loadClipConfig({ petDir: PET_DIR, userConfigPath: CLIP_CONFIG_FILE });
   return {
-    size,
-    reviewHoldMs: raw.reviewHoldMs || 8000,
-    clips,
-    files,
-    missing,
+    ...resolved,
     state: machine ? machine.aggregate() : "idle",
     threads: machine ? machine.threadList() : [],
     drivingId: machine ? machine.snapshot().drivingId : null,
@@ -56,15 +47,65 @@ function loadManifest() {
   };
 }
 
-function pathToFileUrl(filePath) {
-  const resolved = path.resolve(filePath).replace(/\\/g, "/");
-  return encodeURI(`file:///${resolved}`);
+function pushClipConfig(payload) {
+  const data = payload || loadManifest();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pet:init", { ...data, ...(machine ? machine.snapshot() : {}) });
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send("clips:updated", data);
+  }
+  return data;
+}
+
+function maskOutputPath(videoPath) {
+  const id = crypto.createHash("sha256").update(videoPath.toLowerCase()).digest("hex").slice(0, 20);
+  return path.join(app.getPath("userData"), "masks", `${id}.png`);
+}
+
+function runMaskGenerator(videoPath, outputPath) {
+  const key = videoPath.toLowerCase();
+  if (maskJobs.has(key)) return maskJobs.get(key);
+  const script = path.join(__dirname, "scripts", "make-person-sdf-mask.py");
+  const job = new Promise((resolve, reject) => {
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    const child = spawn(process.env.PYTHON || "python", [script, videoPath, outputPath], {
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let errorText = "";
+    child.stderr.on("data", (chunk) => {
+      errorText = `${errorText}${chunk}`.slice(-2000);
+    });
+    child.once("error", (error) => reject(new Error(`无法启动 Mask 生成器：${error.message}`)));
+    child.once("close", (code) => {
+      if (code === 0 && fs.existsSync(outputPath)) resolve(outputPath);
+      else reject(new Error(`Mask 生成失败${errorText ? `：${errorText.trim()}` : ""}`));
+    });
+  });
+  maskJobs.set(key, job);
+  job.finally(() => maskJobs.delete(key)).catch(() => {});
+  return job;
 }
 
 function clampScale(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0.5;
   return Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(n * 100) / 100));
+}
+
+function loadReadReceipts() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(READ_FILE, "utf8"));
+    return raw.receipts && typeof raw.receipts === "object" ? raw.receipts : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReadReceipts(receipts) {
+  fs.mkdirSync(path.dirname(READ_FILE), { recursive: true });
+  fs.writeFileSync(READ_FILE, `${JSON.stringify({ receipts: receipts || {} }, null, 2)}\n`);
 }
 
 function loadSettings() {
@@ -83,7 +124,21 @@ function videoSize() {
 
 function windowSize() {
   const [width, height] = videoSize();
-  return [Math.max(width, 280), height + PANEL_HEIGHT];
+  const extra = Math.max(0, panelHeight);
+  return [Math.max(width, extra ? 280 : width), height + extra];
+}
+
+function applyWindowSize() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const [width, height] = windowSize();
+  const bounds = mainWindow.getBounds();
+  if (bounds.width === width && bounds.height === height) return;
+  mainWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y,
+    width,
+    height,
+  });
 }
 
 function saveSettings() {
@@ -199,6 +254,16 @@ function trayImage() {
   );
 }
 
+function openCodexThread(id) {
+  const threadId = String(id || "");
+  if (!THREAD_ID_RE.test(threadId)) return;
+  const url = `codex://threads/${threadId}`;
+  shell.openExternal(url).catch((error) => {
+    console.error("[codex-video-pet] open thread failed", url, error);
+  });
+  if (machine) machine.markRead(threadId);
+}
+
 function truncate(text, max = 22) {
   const value = String(text || "");
   return value.length > max ? `${value.slice(0, max)}…` : value;
@@ -211,15 +276,10 @@ function rebuildTray() {
   const states = ["idle", "thinking", "working", "waiting", "review", "failed"];
   const sessionItems =
     snap.threads.length === 0
-      ? [{ label: "暂无会话", enabled: false }]
+      ? [{ label: "暂无活动", enabled: false }]
       : snap.threads.map((thread) => ({
           label: `${thread.driving ? "▶ " : ""}${truncate(thread.title)}  · ${thread.label}`,
-          type: "checkbox",
-          checked: Boolean(thread.pinned),
-          click: () => {
-            machine.togglePin(thread.id);
-            saveSettings();
-          },
+          click: () => openCodexThread(thread.id),
         }));
   const template = [
     { label: `状态：${current}`, enabled: false },
@@ -283,12 +343,14 @@ function rebuildTray() {
       },
     },
     {
+      label: "设置…",
+      click: () => createSettingsWindow(),
+    },
+    {
       label: "重新加载切片",
       click: () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("pet:init", { ...loadManifest(), ...machine.snapshot() });
-          sendState();
-        }
+        pushClipConfig();
+        sendState();
       },
     },
     { type: "separator" },
@@ -296,6 +358,36 @@ function rebuildTray() {
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
   tray.setToolTip(`Codex Video Pet · ${current}${snap.threads.find((row) => row.driving)?.title ? ` · ${snap.threads.find((row) => row.driving).title}` : ""}`);
+}
+
+function createSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = new BrowserWindow({
+    width: 560,
+    height: 740,
+    minWidth: 440,
+    minHeight: 480,
+    title: "桌宠视频设置",
+    autoHideMenuBar: true,
+    backgroundColor: "#1b1b1f",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  settingsWindow.setMenuBarVisibility(false);
+  settingsWindow.loadFile(path.join(__dirname, "settings.html"));
+  settingsWindow.webContents.on("did-finish-load", () => {
+    settingsWindow.webContents.send("clips:updated", loadManifest());
+  });
+  settingsWindow.on("closed", () => {
+    settingsWindow = null;
+  });
 }
 
 function createTray() {
@@ -313,6 +405,8 @@ async function startServices() {
   machine = new PetStateMachine({
     reviewHoldMs: loadManifest().reviewHoldMs,
     onChange: sendState,
+    onReadChange: saveReadReceipts,
+    readAt: loadReadReceipts(),
   });
   if (saved.pinnedId) machine.setPinned(saved.pinnedId);
 
@@ -327,7 +421,7 @@ async function startServices() {
 
   sessionCatalog = createSessionCatalog({
     onChange: (threads) => machine.setTitles(threads),
-    limit: LIST_LIMIT,
+    limit: TITLE_LIMIT,
   });
   await sessionCatalog.refresh(true);
   sessionCatalog.start();
@@ -354,6 +448,49 @@ if (!gotLock) {
     await startServices();
     createWindow();
     createTray();
+  });
+
+  ipcMain.handle("clips:get", () => loadManifest());
+
+  ipcMain.handle("clips:add-files", async (event, state) => {
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(parent || settingsWindow, {
+      title: "选择视频",
+      properties: ["openFile", "multiSelections"],
+      filters: [{ name: "视频", extensions: ["mp4", "webm", "mov"] }],
+    });
+    if (result.canceled) return loadManifest();
+    return pushClipConfig(addClipFiles(PET_DIR, CLIP_CONFIG_FILE, state, result.filePaths));
+  });
+
+  ipcMain.handle("clips:update", (_event, state, patch) => {
+    return pushClipConfig(updateClipState(PET_DIR, CLIP_CONFIG_FILE, state, patch || {}));
+  });
+
+  ipcMain.handle("clips:generate-mask", async (_event, state, index) => {
+    const clip = clipFileAt(PET_DIR, CLIP_CONFIG_FILE, state, Number(index));
+    if (!clip?.exists) throw new Error("找不到要生成 Mask 的视频");
+    const outputPath = await runMaskGenerator(clip.abs, maskOutputPath(clip.abs));
+    return pushClipConfig(setClipMask(PET_DIR, CLIP_CONFIG_FILE, state, Number(index), outputPath));
+  });
+
+  ipcMain.handle("clips:restore", (_event, state) => {
+    return pushClipConfig(restoreClipState(PET_DIR, CLIP_CONFIG_FILE, state));
+  });
+
+  ipcMain.on("pet:open-thread", (_event, id) => {
+    openCodexThread(id);
+  });
+
+  ipcMain.on("pet:mark-read", (_event, id) => {
+    if (machine) machine.markRead(id);
+  });
+
+  ipcMain.on("pet:panel-height", (_event, height) => {
+    const next = Math.max(0, Math.round(Number(height) || 0));
+    if (next === panelHeight) return;
+    panelHeight = next;
+    applyWindowSize();
   });
 
   ipcMain.on("pet:pin-thread", (_event, id) => {

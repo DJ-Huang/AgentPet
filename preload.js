@@ -13,4 +13,15 @@ contextBridge.exposeInMainWorld("petBridge", {
   dragStart: (cursor) => ipcRenderer.send("pet:drag-start", cursor),
   dragEnd: () => ipcRenderer.send("pet:drag-end"),
   pinThread: (id) => ipcRenderer.send("pet:pin-thread", id),
+  markRead: (id) => ipcRenderer.send("pet:mark-read", id),
+  openThread: (id) => ipcRenderer.send("pet:open-thread", id),
+  setPanelHeight: (height) => ipcRenderer.send("pet:panel-height", height),
+  getClipConfig: () => ipcRenderer.invoke("clips:get"),
+  addClipFiles: (state) => ipcRenderer.invoke("clips:add-files", state),
+  updateClipState: (state, patch) => ipcRenderer.invoke("clips:update", state, patch),
+  generateClipMask: (state, index) => ipcRenderer.invoke("clips:generate-mask", state, index),
+  restoreClipState: (state) => ipcRenderer.invoke("clips:restore", state),
+  onClipConfig: (handler) => {
+    ipcRenderer.on("clips:updated", (_event, data) => handler(data));
+  },
 });

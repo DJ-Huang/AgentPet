@@ -77,4 +77,16 @@ Hook 映射：
 ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -an idle.webm
 ```
 
+## 为普通视频生成角色 Mask
+
+在“桌宠视频设置”中，每个视频行都有“生成 Mask”按钮。它会分析人物在整段视频中的活动范围，生成一张带 SDF 羽化的 Alpha Mask，并在播放时自动应用；原视频不会被改写。
+
+首次使用前，请确保系统的 `python` 命令可用，并安装生成器依赖：
+
+```powershell
+python -m pip install rembg onnxruntime opencv-python-headless pillow
+```
+
+生成的 Mask 会保存在应用数据目录，和该视频路径自动关联。删除或移动原视频后，该关联不会再生效。
+
 **WebM VP9 + yuva420p，必须带 `-auto-alt-ref 0`。** 第一版仓库里是纯色透明短循环占位，方便先接线。
