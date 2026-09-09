@@ -1,0 +1,12 @@
+{
+  "size": [854, 480],
+  "reviewHoldMs": 8000,
+  "clips": {
+    "idle": { "file": "thinking.webm", "loop": true },
+    "thinking": { "file": "thinking.webm", "loop": true },
+    "working": { "file": "thinking.webm", "loop": true },
+    "waiting": { "file": "thinking.webm", "loop": true },
+    "review": { "file": "thinking.webm", "loop": false, "next": "idle" },
+    "failed": { "file": "thinking.webm", "loop": false, "next": "idle" }
+  }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Codex Video Pet</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+      }
+      #stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+        cursor: grab;
+      }
+      body.dragging,
+      body.dragging #stage {
+        cursor: grabbing;
+      }
+      video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: transparent;
+        opacity: 0;
+        pointer-events: none;
+      }
+      video.active {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <video id="video-a" muted playsinline preload="auto"></video>
+      <video id="video-b" muted playsinline preload="auto"></video>
+    </div>
+    <script src="./player.js"></script>
+  </body>
+</html>
