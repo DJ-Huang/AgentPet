@@ -1,5 +1,33 @@
+# Dependencies
 node_modules/
+
+# Build and package artifacts
 dist/
-*.log
-.DS_Store
+build/
+out/
+release/
+*.asar
+
+# Test and tool output
+coverage/
+.nyc_output/
+_thinking_preview/
+
+# Runtime data and logs
 user-data/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Local environment and secrets (commit an .env.example when needed)
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

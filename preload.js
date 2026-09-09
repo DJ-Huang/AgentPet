@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld("petBridge", {
   scaleBy: (delta) => ipcRenderer.send("pet:scale-by", delta),
   dragStart: (cursor) => ipcRenderer.send("pet:drag-start", cursor),
   dragEnd: () => ipcRenderer.send("pet:drag-end"),
+  pinThread: (id) => ipcRenderer.send("pet:pin-thread", id),
 });

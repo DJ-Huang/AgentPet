@@ -17,6 +17,7 @@
   let sampleRaf = 0;
   let dragging = false;
   const stage = document.getElementById("stage");
+  const sessionList = document.getElementById("session-list");
 
   function fileFor(state) {
     const seen = new Set();
@@ -144,6 +145,55 @@
     return pixel[3] > 20;
   }
 
+  function renderSessions(threads) {
+    if (!sessionList) return;
+    const rows = Array.isArray(threads) ? threads : [];
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "session-empty";
+      empty.textContent = "暂无会话";
+      sessionList.replaceChildren(empty);
+      return;
+    }
+    sessionList.replaceChildren(
+      ...rows.map((thread) => {
+        const row = document.createElement("div");
+        row.className = "session-row";
+        if (thread.driving) row.classList.add("driving");
+        if (thread.pinned) row.classList.add("pinned");
+        row.dataset.id = thread.id;
+
+        const dot = document.createElement("span");
+        dot.className = "session-dot";
+        if (thread.state === "review") dot.classList.add("review");
+        else if (thread.state === "failed") dot.classList.add("failed");
+        else if (thread.state !== "idle") dot.classList.add("running");
+
+        const title = document.createElement("span");
+        title.className = "session-title";
+        title.textContent = thread.title || "未命名";
+
+        const label = document.createElement("span");
+        label.className = "session-label";
+        label.textContent = thread.pinned ? "钉住" : thread.label || "";
+
+        row.append(dot, title, label);
+        row.addEventListener("pointerdown", (event) => {
+          event.stopPropagation();
+        });
+        row.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (window.petBridge) window.petBridge.pinThread(thread.id);
+        });
+        return row;
+      }),
+    );
+  }
+
+  function overPanel(event) {
+    return Boolean(event.target.closest && event.target.closest("#sessions"));
+  }
+
   function setIgnore(next) {
     if (dragging) next = false;
     if (next === ignoreMouse) return;
@@ -163,7 +213,8 @@
     if (sampleRaf) return;
     sampleRaf = requestAnimationFrame(() => {
       sampleRaf = 0;
-      setIgnore(!hitPet(event.clientX, event.clientY));
+      if (overPanel(event)) setIgnore(false);
+      else setIgnore(!hitPet(event.clientX, event.clientY));
     });
   });
 
@@ -208,9 +259,11 @@
     window.petBridge.onInit((data) => {
       manifest = data || manifest;
       playState(data?.state || "idle");
+      renderSessions(data?.threads);
     });
     window.petBridge.onState((data) => {
       playState(data?.state || "idle");
+      renderSessions(data?.threads);
     });
   }
 })();

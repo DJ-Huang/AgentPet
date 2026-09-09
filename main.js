@@ -6,6 +6,7 @@ const path = require("node:path");
 const { PetStateMachine } = require("./lib/state-machine");
 const { createStateServer } = require("./lib/http-server");
 const { createJsonlWatcher } = require("./lib/jsonl-watcher");
+const { createSessionCatalog, LIST_LIMIT } = require("./lib/session-catalog");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
@@ -15,11 +16,13 @@ const SCALE_MIN = 0.25;
 const SCALE_MAX = 3;
 const SCALE_STEP = 0.1;
 const SCALE_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+const PANEL_HEIGHT = 188;
 
 let mainWindow = null;
 let tray = null;
 let httpServer = null;
 let jsonlWatcher = null;
+let sessionCatalog = null;
 let machine = null;
 let scale = 0.5;
 let dragOffset = null;
@@ -47,6 +50,9 @@ function loadManifest() {
     files,
     missing,
     state: machine ? machine.aggregate() : "idle",
+    threads: machine ? machine.threadList() : [],
+    drivingId: machine ? machine.snapshot().drivingId : null,
+    pinnedId: machine ? machine.pinnedId : null,
   };
 }
 
@@ -69,10 +75,15 @@ function loadSettings() {
   }
 }
 
-function scaledSize() {
+function videoSize() {
   const manifest = loadManifest();
   const [width, height] = manifest.size;
   return [Math.max(80, Math.round(width * scale)), Math.max(80, Math.round(height * scale))];
+}
+
+function windowSize() {
+  const [width, height] = videoSize();
+  return [Math.max(width, 280), height + PANEL_HEIGHT];
 }
 
 function saveSettings() {
@@ -81,7 +92,7 @@ function saveSettings() {
   fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
   fs.writeFileSync(
     SETTINGS_FILE,
-    JSON.stringify({ x: bounds.x, y: bounds.y, scale }),
+    JSON.stringify({ x: bounds.x, y: bounds.y, scale, pinnedId: machine ? machine.pinnedId : null }),
   );
 }
 
@@ -114,7 +125,7 @@ function setScale(next) {
     rebuildTray();
     return;
   }
-  const [width, height] = scaledSize();
+  const [width, height] = windowSize();
   const bounds = mainWindow.getBounds();
   mainWindow.setBounds({
     x: Math.round(bounds.x + bounds.width / 2 - width / 2),
@@ -126,16 +137,18 @@ function setScale(next) {
   rebuildTray();
 }
 
-function sendState() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.send("pet:state", { state: machine.aggregate() });
+function sendState(snap) {
+  const data = snap || (machine ? machine.snapshot() : { state: "idle", threads: [] });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pet:state", data);
+  }
   rebuildTray();
 }
 
 function createWindow() {
   const saved = loadSettings();
   if (Number.isFinite(saved.scale)) scale = clampScale(saved.scale);
-  const [width, height] = scaledSize();
+  const [width, height] = windowSize();
   const bounds = restorePosition(width, height);
 
   mainWindow = new BrowserWindow({
@@ -169,7 +182,7 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "pet.html"));
 
   mainWindow.webContents.on("did-finish-load", () => {
-    mainWindow.webContents.send("pet:init", loadManifest());
+    mainWindow.webContents.send("pet:init", { ...loadManifest(), ...machine.snapshot() });
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
   mainWindow.on("moved", saveSettings);
@@ -186,12 +199,47 @@ function trayImage() {
   );
 }
 
+function truncate(text, max = 22) {
+  const value = String(text || "");
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
 function rebuildTray() {
-  if (!tray) return;
-  const current = machine.aggregate();
+  if (!tray || !machine) return;
+  const snap = machine.snapshot();
+  const current = snap.state;
   const states = ["idle", "thinking", "working", "waiting", "review", "failed"];
+  const sessionItems =
+    snap.threads.length === 0
+      ? [{ label: "暂无会话", enabled: false }]
+      : snap.threads.map((thread) => ({
+          label: `${thread.driving ? "▶ " : ""}${truncate(thread.title)}  · ${thread.label}`,
+          type: "checkbox",
+          checked: Boolean(thread.pinned),
+          click: () => {
+            machine.togglePin(thread.id);
+            saveSettings();
+          },
+        }));
   const template = [
     { label: `状态：${current}`, enabled: false },
+    { type: "separator" },
+    {
+      label: "Codex 会话",
+      submenu: [
+        {
+          label: "跟随最近活跃",
+          type: "radio",
+          checked: !snap.pinnedId,
+          click: () => {
+            machine.setPinned(null);
+            saveSettings();
+          },
+        },
+        { type: "separator" },
+        ...sessionItems,
+      ],
+    },
     { type: "separator" },
     ...states.map((state) => ({
       label: state,
@@ -238,7 +286,7 @@ function rebuildTray() {
       label: "重新加载切片",
       click: () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("pet:init", loadManifest());
+          mainWindow.webContents.send("pet:init", { ...loadManifest(), ...machine.snapshot() });
           sendState();
         }
       },
@@ -247,7 +295,7 @@ function rebuildTray() {
     { label: "退出", click: () => app.quit() },
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
-  tray.setToolTip(`Codex Video Pet · ${current}`);
+  tray.setToolTip(`Codex Video Pet · ${current}${snap.threads.find((row) => row.driving)?.title ? ` · ${snap.threads.find((row) => row.driving).title}` : ""}`);
 }
 
 function createTray() {
@@ -261,10 +309,12 @@ function createTray() {
 }
 
 async function startServices() {
+  const saved = loadSettings();
   machine = new PetStateMachine({
     reviewHoldMs: loadManifest().reviewHoldMs,
     onChange: sendState,
   });
+  if (saved.pinnedId) machine.setPinned(saved.pinnedId);
 
   httpServer = await createStateServer({
     host: HOST,
@@ -275,10 +325,18 @@ async function startServices() {
     },
   });
 
+  sessionCatalog = createSessionCatalog({
+    onChange: (threads) => machine.setTitles(threads),
+    limit: LIST_LIMIT,
+  });
+  await sessionCatalog.refresh(true);
+  sessionCatalog.start();
+
   jsonlWatcher = createJsonlWatcher({ machine });
   jsonlWatcher.start();
   console.log(`[codex-video-pet] http://${HOST}:${PORT}`);
   console.log(`[codex-video-pet] jsonl ${jsonlWatcher.root}`);
+  console.log(`[codex-video-pet] sessions ${sessionCatalog.path}`);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -296,6 +354,12 @@ if (!gotLock) {
     await startServices();
     createWindow();
     createTray();
+  });
+
+  ipcMain.on("pet:pin-thread", (_event, id) => {
+    if (!machine) return;
+    machine.togglePin(id);
+    saveSettings();
   });
 
   ipcMain.on("pet:clip-ended", (_event, state) => {
@@ -346,6 +410,7 @@ if (!gotLock) {
   app.on("before-quit", () => {
     if (dragTimer) clearInterval(dragTimer);
     saveSettings();
+    if (sessionCatalog) sessionCatalog.stop();
     if (jsonlWatcher) jsonlWatcher.stop();
     if (httpServer) httpServer.close();
   });

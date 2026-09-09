@@ -1,6 +1,6 @@
 # Codex Video Pet
 
-Windows 透明置顶视频桌宠。常驻一个 Electron 窗口，用 Codex 官方 Hooks 驱动几段 WebM；JSONL 只作思考 / 漏掉 Stop 的兜底。
+Windows 透明置顶视频桌宠。读本机 Codex 线程列表驱动动画：宠物旁和托盘显示会话标题、是否在跑；动画跟最近一条活跃会话（也可钉住某一条）。Hooks 只是可选加速，不信任时列表和动画仍会工作。
 
 ## 启动
 
@@ -11,19 +11,32 @@ npm run make-placeholders
 npm start
 ```
 
-启动后桌面右下会出现透明窗。**按住角色即可拖动位置**。托盘可手动切 `thinking` / `working`，也可改缩放；指针在角色上时 **Ctrl + 滚轮** 同样缩放。
+启动后桌面右下会出现透明窗。**视频下方是最近 8 条 Codex 会话**（标题 + 状态点）。绿点表示跑着，紫点回顾，灰点空闲；高亮的是当前驱动动画的那条。点击可钉住，再点取消，回到跟随最近活跃。**按住角色即可拖动**。托盘同样有会话列表和钉住；指针在角色上时 **Ctrl + 滚轮** 缩放（只缩放视频，面板高度固定）。
 
-本机 HTTP 默认监听 `127.0.0.1:17331`。
+本机 HTTP 默认监听 `127.0.0.1:17331`。`GET /sessions` 可看当前线程快照。
 
-## 安装 Codex Hooks
+## 数据源
 
-会**整份替换** `%USERPROFILE%\.codex\hooks.json`（先备份为 `hooks.json.bak-<时间戳>`），Live2D 的 CodexMotionPet 不再跟状态。`config.toml` 里 `[features].hooks = true` 已开，不用改。
+不依赖 `/hooks` 信任：
+
+- 标题：`%USERPROFILE%\.codex\session_index.jsonl`（`id` / `thread_name` / `updated_at`，同一 id 后写覆盖）
+- 是否在跑：tail `%USERPROFILE%\.codex\sessions\**\*.jsonl`
+  - `task_started` / `Reasoning` → thinking
+  - `CommandExecution` / 工具 → working
+  - `task_complete` → review → idle
+- 线程 ID 取 rollout 文件名里的 **第一个** UUID（thread id），与 `session_index` 对齐，而不是文件名末尾的 turn id。
+
+思考状态约 90 秒没有新事件会回 idle，避免卡在黄圆。钉住优先；否则跟 `updatedAt` 最新的非 idle 会话。多条同时非 idle 时优先级：`failed > waiting > working > thinking > review > idle`。
+
+## 可选：安装 Codex Hooks
+
+会**整份替换** `%USERPROFILE%\.codex\hooks.json`（先备份为 `hooks.json.bak-<时间戳>`）。`config.toml` 里 `[features].hooks = true` 已开，不用改。未信任时会话列表和动画仍走上面的本机线程。
 
 ```powershell
 npm run install-hooks
 ```
 
-改完后必须在 Codex 里跑 **`/hooks` 重新信任**。命令 hash 变了会被跳过，桌宠不会动。
+改完后必须在 Codex 里跑 **`/hooks` 重新信任**。命令 hash 变了会被跳过。
 
 Hook 映射：
 
@@ -36,11 +49,7 @@ Hook 映射：
 | `Stop` | review |
 | `Interrupt` / `SessionEnd` | idle |
 
-`hooks/notify.cmd` 只做：读 stdin → POST JSON → 立刻输出 `{}` 退出。`timeout: 5`，fail-open，不拦截权限请求。
-
-关掉 hook 信任时，桌宠仍会 tail `%USERPROFILE%\.codex\sessions\**\*.jsonl`：`task_started` / `Reasoning` → thinking，`CommandExecution` → working，`task_complete` → review。有轮询延迟。
-
-多 session 聚合优先级：`failed > waiting > working > thinking > review > idle`。
+`hooks/notify.cmd` 只做：读 stdin → POST JSON → 立刻输出 `{}` 退出。fail-open，不拦截权限请求。
 
 ## 换成角色成片
 

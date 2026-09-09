@@ -12,11 +12,18 @@
         overflow: hidden;
         background: transparent;
         user-select: none;
+        font-family: "Segoe UI", sans-serif;
+      }
+      #root {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
       }
       #stage {
         position: relative;
-        width: 100%;
-        height: 100%;
+        flex: 1 1 auto;
+        min-height: 80px;
         -webkit-app-region: no-drag;
         app-region: no-drag;
         cursor: grab;
@@ -38,12 +45,91 @@
       video.active {
         opacity: 1;
       }
+      #sessions {
+        flex: 0 0 188px;
+        box-sizing: border-box;
+        padding: 8px 10px 10px;
+        background: rgba(18, 18, 20, 0.82);
+        color: #ececec;
+        pointer-events: auto;
+        cursor: default;
+      }
+      #sessions h2 {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: rgba(255, 255, 255, 0.55);
+      }
+      #session-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .session-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .session-row:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .session-row.driving {
+        background: rgba(94, 200, 227, 0.18);
+      }
+      .session-row.pinned {
+        outline: 1px solid rgba(94, 200, 227, 0.55);
+      }
+      .session-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: 0 0 7px;
+        background: #6b6b6b;
+      }
+      .session-dot.running {
+        background: #62d07a;
+      }
+      .session-dot.review {
+        background: #b884dc;
+      }
+      .session-dot.failed {
+        background: #dc5858;
+      }
+      .session-title {
+        flex: 1 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .session-label {
+        flex: 0 0 auto;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .session-empty {
+        height: 20px;
+        padding: 0 6px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+      }
     </style>
   </head>
   <body>
-    <div id="stage">
-      <video id="video-a" muted playsinline preload="auto"></video>
-      <video id="video-b" muted playsinline preload="auto"></video>
+    <div id="root">
+      <div id="stage">
+        <video id="video-a" muted playsinline preload="auto"></video>
+        <video id="video-b" muted playsinline preload="auto"></video>
+      </div>
+      <div id="sessions">
+        <h2>CODEX 会话</h2>
+        <div id="session-list"></div>
+      </div>
     </div>
     <script src="./player.js"></script>
   </body>
