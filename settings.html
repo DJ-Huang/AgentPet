@@ -35,6 +35,7 @@
       }
       .tabs {
         display: flex;
+        flex-wrap: wrap;
         gap: 6px;
         margin-top: 12px;
       }
@@ -172,15 +173,74 @@
         padding: 8px 6px;
         color: rgba(255, 255, 255, 0.4);
       }
+      .agents-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      #agents-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .agent-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .agent-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .agent-head h2 {
+        margin: 0;
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .agent-status {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+      .agent-status.installed {
+        color: #7dcea0;
+      }
+      .agent-status.partial {
+        color: #f0c674;
+      }
+      .agent-status.error {
+        color: #dc5858;
+      }
+      .agent-path,
+      .agent-note,
+      .agent-log {
+        margin: 0 0 8px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .agent-path {
+        font-family: Consolas, "Courier New", monospace;
+        color: rgba(255, 255, 255, 0.62);
+      }
+      .agent-actions {
+        display: flex;
+        gap: 6px;
+      }
     </style>
   </head>
   <body>
     <header>
       <h1 data-i18n="title">桌宠设置</h1>
-      <p class="hint" data-i18n="subtitle">配置通用选项、状态视频和显示效果。</p>
+      <p class="hint" data-i18n="subtitle">配置通用选项、Agent Hook、状态视频和显示效果。</p>
       <p class="header-actions"><button type="button" id="restore-all" data-i18n="restoreAll">全部恢复默认</button></p>
       <nav class="tabs" aria-label="设置分类" data-i18n-aria-label="settingsCategory">
         <button class="tab active" type="button" data-tab="general" data-i18n="generalTab">通用设置</button>
+        <button class="tab" type="button" data-tab="agents" data-i18n="agentsTab">Agent 设置</button>
         <button class="tab" type="button" data-tab="videos" data-i18n="videosTab">状态视频</button>
         <button class="tab" type="button" data-tab="effects" data-i18n="effectsTab">显示效果</button>
       </nav>
@@ -203,6 +263,17 @@
         </div>
         <p class="effect-help" data-i18n="windowScaleHelp">可在 10%–200% 之间连续调节，也可按住 Ctrl/Command 滚动鼠标滚轮。</p>
       </section>
+    </main>
+    <main id="agents" class="tab-panel" hidden>
+      <section class="settings-card">
+        <div class="agents-toolbar">
+          <button class="primary" type="button" id="install-all-hooks" data-i18n="installAllHooks">一键配置全部</button>
+          <button type="button" id="uninstall-all-hooks" data-i18n="uninstallAllHooks">全部移除</button>
+        </div>
+        <p class="effect-help" data-i18n="agentsHelp">会把桌宠通知 Hook 合并进各 Agent 的用户配置，不会整份覆盖已有 Hook。安装后如需信任，请在对应 Agent 里运行 /hooks。</p>
+      </section>
+      <div id="agents-list"></div>
+      <p class="agent-log" id="agents-log" hidden></p>
     </main>
     <main id="states" class="tab-panel" hidden></main>
     <main id="effects" class="tab-panel" hidden>

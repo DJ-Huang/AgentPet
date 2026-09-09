@@ -5,11 +5,12 @@ const { spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { PetStateMachine } = require("./lib/state-machine");
+const { PetStateMachine, inferAgent } = require("./lib/state-machine");
 const { createStateServer } = require("./lib/http-server");
 const { createJsonlWatcher } = require("./lib/jsonl-watcher");
 const { createSessionCatalog, TITLE_LIMIT } = require("./lib/session-catalog");
 const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, updateMaskEffects, restoreClipState } = require("./lib/clip-config");
+const { getHookStatus, installHooks, uninstallHooks } = require("./lib/agent-hooks");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
@@ -55,10 +56,12 @@ const TEXT = {
     chooseVideo: "选择视频",
     video: "视频",
     untitled: "未命名任务",
+    dismissSession: "从列表中移除",
+    agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "手动" },
     maskStartFailed: "无法启动 Mask 生成器",
     maskFailed: "Mask 生成失败",
     clipNotFound: "找不到要生成 Mask 的视频",
-    states: { idle: "空闲", thinking: "思考中", working: "工作中", waiting: "等待操作", review: "完成", failed: "执行失败" },
+    states: { idle: "空闲", working: "工作中", completed: "完成" },
   },
   en: {
     noActivity: "No activity",
@@ -78,10 +81,12 @@ const TEXT = {
     chooseVideo: "Choose Videos",
     video: "Videos",
     untitled: "Untitled Task",
+    dismissSession: "Remove from list",
+    agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "Manual" },
     maskStartFailed: "Unable to start the Mask generator",
     maskFailed: "Mask generation failed",
     clipNotFound: "The video selected for Mask generation could not be found",
-    states: { idle: "Idle", thinking: "Thinking", working: "Working", waiting: "Awaiting Input", review: "Done", failed: "Failed" },
+    states: { idle: "Idle", working: "Working", completed: "Done" },
   },
 };
 
@@ -95,6 +100,10 @@ function text(key) {
 
 function stateText(state) {
   return TEXT[language]?.states?.[state] || state;
+}
+
+function agentText(agent) {
+  return TEXT[language]?.agents?.[agent] || TEXT["zh-CN"].agents?.[agent] || "";
 }
 
 function loadManifest() {
@@ -344,8 +353,63 @@ function trayImage() {
   );
 }
 
-function openCodexThread(id) {
+function resolveCursorApp() {
+  const localAppData = process.env.LOCALAPPDATA || "";
+  const userProfile = process.env.USERPROFILE || "";
+  const programFiles = process.env.PROGRAMFILES || "";
+  const candidates = [
+    path.join(localAppData, "Programs", "cursor", "Cursor.exe"),
+    path.join(localAppData, "Programs", "Cursor", "Cursor.exe"),
+    path.join(userProfile, "AppData", "Local", "Programs", "cursor", "Cursor.exe"),
+    path.join(programFiles, "cursor", "Cursor.exe"),
+    path.join(programFiles, "Cursor", "Cursor.exe"),
+    "D:\\Program Files\\cursor\\Cursor.exe",
+    "D:\\Program Files\\Cursor\\Cursor.exe",
+    "C:\\Program Files\\cursor\\Cursor.exe",
+    "C:\\Program Files\\Cursor\\Cursor.exe",
+  ];
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return { cmd: candidate, useShell: false };
+  }
+  return { cmd: "cursor", useShell: true };
+}
+
+function launchDetached(cmd, args, useShell) {
+  const child = spawn(cmd, args, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+    shell: useShell,
+  });
+  child.on("error", (error) => {
+    console.error("[codex-video-pet] launch failed", cmd, error);
+  });
+  child.unref();
+}
+
+function openCursor(cwd) {
+  const folder = typeof cwd === "string" && cwd && fs.existsSync(cwd) ? cwd : "";
+  const { cmd, useShell } = resolveCursorApp();
+  try {
+    launchDetached(cmd, folder ? ["--reuse-window", folder] : [], useShell);
+  } catch (error) {
+    console.error("[codex-video-pet] open Cursor failed", error);
+    shell.openExternal("cursor://").catch((err) => {
+      console.error("[codex-video-pet] open Cursor protocol failed", err);
+    });
+  }
+}
+
+function openThread(id) {
   const threadId = String(id || "");
+  if (!threadId) return;
+  const session = machine?.sessions?.get(threadId);
+  const agent = inferAgent(session?.agent, threadId);
+  if (agent === "cursor") {
+    openCursor(session?.cwd || "");
+    if (machine) machine.markRead(threadId);
+    return;
+  }
   if (!THREAD_ID_RE.test(threadId)) return;
   const url = `codex://threads/${threadId}`;
   shell.openExternal(url).catch((error) => {
@@ -364,13 +428,13 @@ function rebuildTray() {
   const snap = machine.snapshot();
   const current = snap.state;
   const separator = language === "en" ? ": " : "：";
-  const states = ["idle", "thinking", "working", "waiting", "review", "failed"];
+  const states = ["idle", "working", "completed"];
   const sessionItems =
     snap.threads.length === 0
       ? [{ label: text("noActivity"), enabled: false }]
       : snap.threads.map((thread) => ({
-          label: `${thread.driving ? "▶ " : ""}${truncate(thread.title || text("untitled"))}  · ${stateText(thread.state)}`,
-          click: () => openCodexThread(thread.id),
+          label: `${thread.driving ? "▶ " : ""}${agentText(thread.agent || "codex")} · ${truncate(thread.title || text("untitled"))}  · ${stateText(thread.state)}`,
+          click: () => openThread(thread.id),
         }));
   const template = [
     { label: `${text("status")}${separator}${stateText(current)}`, enabled: false },
@@ -487,7 +551,6 @@ function createTray() {
 async function startServices() {
   const saved = loadSettings();
   machine = new PetStateMachine({
-    reviewHoldMs: loadManifest().reviewHoldMs,
     onChange: sendState,
     onReadChange: saveReadReceipts,
     readAt: loadReadReceipts(),
@@ -584,8 +647,33 @@ if (!gotLock) {
     return pushClipConfig(restoreClipState(PET_DIR, CLIP_CONFIG_FILE, state));
   });
 
+  ipcMain.handle("hooks:status", () => getHookStatus());
+
+  ipcMain.handle("hooks:install", (_event, agentId) => {
+    const results = installHooks(agentId);
+    return { ...getHookStatus(), results };
+  });
+
+  ipcMain.handle("hooks:uninstall", (_event, agentId) => {
+    const results = uninstallHooks(agentId);
+    return { ...getHookStatus(), results };
+  });
+
   ipcMain.on("pet:open-thread", (_event, id) => {
-    openCodexThread(id);
+    openThread(id);
+  });
+
+  ipcMain.on("pet:thread-menu", (event, id) => {
+    const threadId = String(id || "");
+    if (!threadId || !machine || !mainWindow || mainWindow.isDestroyed()) return;
+    Menu.buildFromTemplate([
+      {
+        label: text("dismissSession"),
+        click: () => {
+          machine.dismissThread(threadId);
+        },
+      },
+    ]).popup({ window: BrowserWindow.fromWebContents(event.sender) || mainWindow });
   });
 
   ipcMain.on("pet:mark-read", (_event, id) => {

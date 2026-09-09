@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("petBridge", {
   pinThread: (id) => ipcRenderer.send("pet:pin-thread", id),
   markRead: (id) => ipcRenderer.send("pet:mark-read", id),
   openThread: (id) => ipcRenderer.send("pet:open-thread", id),
+  threadContextMenu: (id) => ipcRenderer.send("pet:thread-menu", id),
   setPanelHeight: (height) => ipcRenderer.send("pet:panel-height", height),
   getClipConfig: () => ipcRenderer.invoke("clips:get"),
   addClipFiles: (state) => ipcRenderer.invoke("clips:add-files", state),
@@ -33,6 +34,9 @@ contextBridge.exposeInMainWorld("petBridge", {
   updateLanguage: (language) => ipcRenderer.invoke("settings:update-language", language),
   updateScale: (percent) => ipcRenderer.invoke("settings:update-scale", percent),
   restoreClipState: (state) => ipcRenderer.invoke("clips:restore", state),
+  getHookStatus: () => ipcRenderer.invoke("hooks:status"),
+  installHooks: (agentId) => ipcRenderer.invoke("hooks:install", agentId),
+  uninstallHooks: (agentId) => ipcRenderer.invoke("hooks:uninstall", agentId),
   onClipConfig: (handler) => {
     ipcRenderer.on("clips:updated", (_event, data) => handler(data));
   },

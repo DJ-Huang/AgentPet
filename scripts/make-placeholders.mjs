@@ -9,11 +9,8 @@ const TRAY = path.join(ROOT, "assets", "tray.png");
 
 const CLIPS = [
   { name: "idle", r: 94, g: 196, b: 214 },
-  { name: "thinking", r: 232, g: 196, b: 88 },
   { name: "working", r: 110, g: 196, b: 120 },
-  { name: "waiting", r: 232, g: 156, b: 72 },
-  { name: "review", r: 176, g: 132, b: 220 },
-  { name: "failed", r: 220, g: 88, b: 88 },
+  { name: "completed", r: 176, g: 132, b: 220 },
 ];
 
 function run(args) {

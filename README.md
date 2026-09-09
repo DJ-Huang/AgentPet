@@ -1,6 +1,6 @@
 # Codex Video Pet
 
-Windows 透明置顶视频桌宠。读本机 Codex 线程列表驱动动画：宠物旁和托盘显示会话标题、是否在跑；动画跟最近一条活跃会话（也可钉住某一条）。Hooks 只是可选加速，不信任时列表和动画仍会工作。
+Windows 透明置顶视频桌宠。读本机 Codex 线程列表驱动动画：宠物旁和托盘显示会话标题与状态；动画只使用空闲、工作、完成三种状态。Hooks 只是可选加速，不信任时列表和动画仍会工作。
 
 ## 启动
 
@@ -21,12 +21,11 @@ npm start
 
 - 标题：`%USERPROFILE%\.codex\session_index.jsonl`（`id` / `thread_name` / `updated_at`，同一 id 后写覆盖）
 - 是否在跑：tail `%USERPROFILE%\.codex\sessions\**\*.jsonl`
-  - `task_started` / `Reasoning` → thinking
-  - `CommandExecution` / 工具 → working
-  - `task_complete` → review → idle
+  - `task_started` / `Reasoning` / `CommandExecution` / 工具 → working
+  - `task_complete` → completed
 - 线程 ID 取 rollout 文件名里的 **第一个** UUID（thread id），与 `session_index` 对齐，而不是文件名末尾的 turn id。
 
-思考状态约 90 秒没有新事件会回 idle，避免卡在黄圆。钉住优先；否则跟 `updatedAt` 最新的非 idle 会话。多条同时非 idle 时优先级：`failed > waiting > working > thinking > review > idle`。
+视频状态始终从活动列表计算，固定优先级为 `working > completed > idle`：只要任意活动仍在工作，就播放工作视频；没有工作活动但列表里还有未读完成项，就播放完成视频；两类活动都没有才播放空闲视频。思考、执行工具和等待操作都归入“工作”，失败结束也归入“完成”，不会产生第四种视频状态。完成视频播完或收到 `SessionEnd` 都不会擅自清掉完成态；打开或移除对应活动后，列表中没有完成项才回空闲。
 
 ## 可选：安装 Codex Hooks
 
@@ -43,10 +42,10 @@ Hook 映射：
 | 事件 | 状态 |
 |------|------|
 | `SessionStart` | 确保桌宠在跑，不强制切片 |
-| `UserPromptSubmit` | thinking |
+| `UserPromptSubmit` | working |
 | `PreToolUse` / `PostToolUse` | working |
-| `PermissionRequest` | waiting（只观察，stdout `{}`） |
-| `Stop` | review |
+| `PermissionRequest` | working（只观察，stdout `{}`） |
+| `Stop` / `StopFailure` | completed |
 | `Interrupt` / `SessionEnd` | idle |
 
 `hooks/notify.cmd` 只做：读 stdin → POST JSON → 立刻输出 `{}` 退出。fail-open，不拦截权限请求。
@@ -59,17 +58,14 @@ Hook 映射：
 {
   "size": [360, 360],
   "clips": {
-    "idle": { "file": "idle.webm", "loop": true },
-    "thinking": { "file": "thinking.webm", "loop": true },
     "working": { "file": "working.webm", "loop": true },
-    "waiting": { "file": "waiting.webm", "loop": true },
-    "review": { "file": "review.webm", "loop": false, "next": "idle" },
-    "failed": { "file": "failed.webm", "loop": false, "next": "idle" }
+    "completed": { "file": "completed.webm", "loop": true },
+    "idle": { "file": "idle.webm", "loop": true }
   }
 }
 ```
 
-缺文件时回退：`thinking` → `working` → `idle`，其它缺的回 `idle`，不崩溃。`review` / `failed` 播完或 8 秒后回 idle。
+`working` 或 `completed` 缺文件时回退到 `idle`，不会改变活动列表里的真实状态。
 
 推荐编码（透明 WebM）：
 

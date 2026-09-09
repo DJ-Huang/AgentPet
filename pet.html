@@ -105,11 +105,39 @@
       .session-dot.running {
         background: #62d07a;
       }
-      .session-dot.review {
+      .session-dot.completed {
         background: #b884dc;
       }
-      .session-dot.failed {
-        background: #dc5858;
+      .session-agent {
+        flex: 0 0 auto;
+        max-width: 58px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 10px;
+        font-weight: 600;
+        height: 16px;
+        line-height: 16px;
+        padding: 0 5px;
+        border-radius: 3px;
+        color: rgba(255, 255, 255, 0.62);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .session-agent.codex {
+        color: #9fd4ea;
+        background: rgba(94, 200, 227, 0.16);
+      }
+      .session-agent.cursor {
+        color: #c4b5fd;
+        background: rgba(139, 92, 246, 0.18);
+      }
+      .session-agent.codely-cli {
+        color: #86efac;
+        background: rgba(34, 197, 94, 0.16);
+      }
+      .session-agent.claude-code {
+        color: #fdba74;
+        background: rgba(234, 88, 12, 0.18);
       }
       .session-title {
         flex: 1 1 auto;

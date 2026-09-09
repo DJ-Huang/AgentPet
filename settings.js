@@ -2,15 +2,35 @@
   const TEXT = {
     "zh-CN": {
       title: "桌宠设置",
-      subtitle: "配置通用选项、状态视频和显示效果。",
+      subtitle: "配置通用选项、Agent Hook、状态视频和显示效果。",
       restoreAll: "全部恢复默认",
       settingsCategory: "设置分类",
       generalTab: "通用设置",
+      agentsTab: "Agent 设置",
       videosTab: "状态视频",
       effectsTab: "显示效果",
       language: "界面语言",
       windowScale: "桌宠缩放",
       windowScaleHelp: "可在 10%–200% 之间连续调节，也可按住 Ctrl/Command 滚动鼠标滚轮。",
+      agentsHelp: "会把桌宠通知 Hook 合并进各 Agent 的用户配置，不会整份覆盖已有 Hook。安装后如需信任，请在对应 Agent 里运行 /hooks。",
+      installAllHooks: "一键配置全部",
+      uninstallAllHooks: "全部移除",
+      installHooks: "安装 / 更新",
+      uninstallHooks: "移除",
+      hookInstalled: "已安装",
+      hookPartial: "部分安装",
+      hookMissing: "未安装",
+      hookError: "配置损坏",
+      hookBusy: "正在写入…",
+      hookInstallFailed: "安装 Hook 失败",
+      hookUninstallFailed: "移除 Hook 失败",
+      hookLoadFailed: "读取 Hook 状态失败",
+      agentNotes: {
+        codex: "写入 ~/.codex/hooks.json。安装后请在 Codex 运行 /hooks 并信任新命令。",
+        cursor: "写入用户级 ~/.cursor/hooks.json。保存后会自动重载；若未生效请重启 Cursor。",
+        "codely-cli": "写入 ~/.codely-cli/extensions/desktop-pet（扩展级 Hook，不走项目信任拦截），并打开 settings.json 的 hooks.enabled。请重启 Codely CLI 后运行 /hooks 确认。",
+        "claude-code": "合并进 ~/.claude/settings.json，不会覆盖其他设置。可在 Claude Code 运行 /hooks 确认。",
+      },
       edgeFade: "四周羽化",
       edgeFadeHelp: "最外沿透明度固定为 0，向内渐变至完全可见；百分比控制渐变宽度，缩放后效果保持一致。",
       overallOpacity: "整体透明度",
@@ -31,19 +51,39 @@
       saveEffectsFailed: "保存显示效果失败",
       saveScaleFailed: "保存缩放设置失败",
       generateMaskFailed: "生成 Mask 失败",
-      states: { idle: "空闲", thinking: "思考中", working: "工作中", waiting: "等待操作", review: "完成", failed: "执行失败" },
+      states: { idle: "空闲", working: "工作中", completed: "完成" },
     },
     en: {
       title: "Desktop Pet Settings",
-      subtitle: "Configure general options, status videos, and visual effects.",
+      subtitle: "Configure general options, agent hooks, status videos, and visual effects.",
       restoreAll: "Restore All Defaults",
       settingsCategory: "Settings categories",
       generalTab: "General",
+      agentsTab: "Agents",
       videosTab: "Status Videos",
       effectsTab: "Visual Effects",
       language: "Language",
       windowScale: "Pet Scale",
       windowScaleHelp: "Adjust continuously from 10% to 200%, or hold Ctrl/Command while scrolling the mouse wheel.",
+      agentsHelp: "Merges the desktop-pet notify hook into each agent's user config without replacing existing hooks. If trust is required, run /hooks in that agent.",
+      installAllHooks: "Configure All",
+      uninstallAllHooks: "Remove All",
+      installHooks: "Install / Update",
+      uninstallHooks: "Remove",
+      hookInstalled: "Installed",
+      hookPartial: "Partial",
+      hookMissing: "Not installed",
+      hookError: "Broken config",
+      hookBusy: "Writing…",
+      hookInstallFailed: "Failed to install hooks",
+      hookUninstallFailed: "Failed to remove hooks",
+      hookLoadFailed: "Failed to load hook status",
+      agentNotes: {
+        codex: "Writes ~/.codex/hooks.json. After install, run /hooks in Codex and trust the new commands.",
+        cursor: "Writes user hooks to ~/.cursor/hooks.json. Cursor reloads on save; restart Cursor if they do not appear.",
+        "codely-cli": "Installs ~/.codely-cli/extensions/desktop-pet (extension hooks skip project trust) and sets hooks.enabled. Restart Codely CLI, then run /hooks to confirm.",
+        "claude-code": "Merges into ~/.claude/settings.json without replacing other settings. Confirm with /hooks in Claude Code.",
+      },
       edgeFade: "Edge Feather",
       edgeFadeHelp: "The outer edge stays fully transparent and fades inward; the percentage remains consistent when scaled.",
       overallOpacity: "Overall Opacity",
@@ -64,11 +104,11 @@
       saveEffectsFailed: "Failed to save visual effects",
       saveScaleFailed: "Failed to save scale setting",
       generateMaskFailed: "Failed to generate Mask",
-      states: { idle: "Idle", thinking: "Thinking", working: "Working", waiting: "Awaiting Input", review: "Done", failed: "Failed" },
+      states: { idle: "Idle", working: "Working", completed: "Done" },
     },
   };
-  const STATE_IDS = { review: "done" };
-  const ORDER = ["idle", "thinking", "working", "waiting", "review", "failed"];
+  const STATE_IDS = {};
+  const ORDER = ["idle", "working", "completed"];
   const root = document.getElementById("states");
   const languageInput = document.getElementById("language");
   const scaleInput = document.getElementById("window-scale");
@@ -77,11 +117,15 @@
   const edgeFadeValue = document.getElementById("edge-fade-percent-value");
   const overallInput = document.getElementById("overall-opacity");
   const overallValue = document.getElementById("overall-opacity-value");
+  const agentsList = document.getElementById("agents-list");
+  const agentsLog = document.getElementById("agents-log");
   const DEFAULT_EFFECTS = { edgeFadePercent: 12, overallOpacity: 80 };
   let config = { editor: {}, clips: {} };
   let language = "zh-CN";
   let effectsSaveTimer = 0;
   let scaleSaveTimer = 0;
+  let hookStatus = { agents: [] };
+  let hooksBusy = false;
 
   function t(key) {
     return TEXT[language]?.[key] ?? TEXT["zh-CN"][key] ?? key;
@@ -89,6 +133,77 @@
 
   function stateLabel(state) {
     return TEXT[language]?.states?.[state] || state;
+  }
+
+  function hookStatusLabel(status) {
+    if (status === "installed") return t("hookInstalled");
+    if (status === "partial") return t("hookPartial");
+    if (status === "error") return t("hookError");
+    return t("hookMissing");
+  }
+
+  function agentNoteText(id) {
+    return TEXT[language]?.agentNotes?.[id] || TEXT["zh-CN"].agentNotes?.[id] || "";
+  }
+
+  function setAgentsLog(message) {
+    if (!agentsLog) return;
+    if (!message) {
+      agentsLog.hidden = true;
+      agentsLog.textContent = "";
+      return;
+    }
+    agentsLog.hidden = false;
+    agentsLog.textContent = message;
+  }
+
+  function renderAgents() {
+    if (!agentsList) return;
+    const agents = Array.isArray(hookStatus.agents) ? hookStatus.agents : [];
+    agentsList.replaceChildren(
+      ...agents.map((agent) => {
+        const card = document.createElement("section");
+        card.className = "agent-card";
+        card.dataset.agent = agent.id;
+
+        const head = document.createElement("div");
+        head.className = "agent-head";
+        const title = document.createElement("h2");
+        title.textContent = agent.name;
+        const status = document.createElement("span");
+        status.className = `agent-status ${agent.status || "missing"}`;
+        status.textContent = hookStatusLabel(agent.status);
+        head.append(title, status);
+
+        const pathLine = document.createElement("p");
+        pathLine.className = "agent-path";
+        pathLine.textContent = agent.displayPath || agent.configPath || "";
+
+        const note = document.createElement("p");
+        note.className = "agent-note";
+        note.textContent = agent.error || agentNoteText(agent.id);
+
+        const actions = document.createElement("div");
+        actions.className = "agent-actions";
+        const install = document.createElement("button");
+        install.className = "primary";
+        install.dataset.action = "install";
+        install.disabled = hooksBusy;
+        install.textContent = hooksBusy ? t("hookBusy") : t("installHooks");
+        const uninstall = document.createElement("button");
+        uninstall.dataset.action = "uninstall";
+        uninstall.disabled = hooksBusy || agent.status === "missing";
+        uninstall.textContent = t("uninstallHooks");
+        actions.append(install, uninstall);
+
+        card.append(head, pathLine, note, actions);
+        return card;
+      }),
+    );
+    ["install-all-hooks", "uninstall-all-hooks"].forEach((id) => {
+      const button = document.getElementById(id);
+      if (button) button.disabled = hooksBusy;
+    });
   }
 
   function applyLanguage(nextLanguage) {
@@ -225,6 +340,7 @@
     render();
     renderEffects();
     renderScale();
+    renderAgents();
   }
 
   async function saveEffects() {
@@ -352,11 +468,58 @@
     });
   }
 
+  async function loadHooks() {
+    if (!window.petBridge?.getHookStatus) return;
+    hookStatus = await window.petBridge.getHookStatus();
+    renderAgents();
+  }
+
+  async function runHookAction(action, agentId) {
+    if (!window.petBridge || hooksBusy) return;
+    hooksBusy = true;
+    renderAgents();
+    try {
+      const next = action === "uninstall"
+        ? await window.petBridge.uninstallHooks(agentId)
+        : await window.petBridge.installHooks(agentId);
+      hookStatus = next;
+      const written = (next.results || []).map((item) => item.configPath).filter(Boolean);
+      setAgentsLog(written.join("\n"));
+      renderAgents();
+    } catch (error) {
+      renderAgents();
+      window.alert(error?.message || (action === "uninstall" ? t("hookUninstallFailed") : t("hookInstallFailed")));
+    } finally {
+      hooksBusy = false;
+      renderAgents();
+    }
+  }
+
+  if (agentsList) {
+    agentsList.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const card = button.closest(".agent-card");
+      if (!card) return;
+      runHookAction(button.dataset.action, card.dataset.agent);
+    });
+  }
+
+  const installAll = document.getElementById("install-all-hooks");
+  if (installAll) {
+    installAll.addEventListener("click", () => runHookAction("install", "*"));
+  }
+  const uninstallAll = document.getElementById("uninstall-all-hooks");
+  if (uninstallAll) {
+    uninstallAll.addEventListener("click", () => runHookAction("uninstall", "*"));
+  }
+
   if (window.petBridge) {
     window.petBridge.onLanguage((nextLanguage) => {
       applyLanguage(nextLanguage);
       render();
       renderEffects();
+      renderAgents();
     });
     window.petBridge.onScale((nextScale) => {
       config = { ...config, scale: nextScale };
@@ -364,5 +527,8 @@
     });
     window.petBridge.onClipConfig((data) => apply(data));
     window.petBridge.getClipConfig().then(apply).catch(() => apply({ editor: {} }));
+    loadHooks().catch((error) => {
+      setAgentsLog(error?.message || t("hookLoadFailed"));
+    });
   }
 })();

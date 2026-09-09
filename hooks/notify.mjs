@@ -8,31 +8,103 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
-const EVENT = process.argv[2] || "";
+const KNOWN_AGENTS = new Set(["codex", "codely-cli", "cursor", "claude-code"]);
+const EVENT_ALIASES = {
+  sessionstart: "SessionStart",
+  sessionend: "SessionEnd",
+  userpromptsubmit: "UserPromptSubmit",
+  beforesubmitprompt: "UserPromptSubmit",
+  beforeagent: "UserPromptSubmit",
+  pretooluse: "PreToolUse",
+  beforetool: "PreToolUse",
+  posttooluse: "PostToolUse",
+  aftertool: "PostToolUse",
+  posttoolusefailure: "PostToolUseFailure",
+  aftertoolfailure: "PostToolUseFailure",
+  permissionrequest: "PermissionRequest",
+  stop: "Stop",
+  afteragent: "Stop",
+  stopfailure: "StopFailure",
+  interrupt: "Interrupt",
+  subagentstop: "SubagentStop",
+  afteragentthought: "UserPromptSubmit",
+};
+
+function parseArgs(argv) {
+  let agent = "codex";
+  let event = "";
+  for (const raw of argv) {
+    const arg = String(raw || "").trim();
+    if (!arg || arg === "--pet" || arg === "destokpet") continue;
+    if (KNOWN_AGENTS.has(arg)) {
+      agent = arg;
+      continue;
+    }
+    event = arg;
+  }
+  return { agent, event };
+}
+
+function normalizeEvent(event, payload) {
+  const raw = event || payload?.hook_event_name || payload?.hookEventName || payload?.event || "";
+  const key = String(raw).replace(/[^a-zA-Z]/g, "").toLowerCase();
+  if (EVENT_ALIASES[key]) return EVENT_ALIASES[key];
+  if (!raw) return "";
+  return raw[0].toUpperCase() + raw.slice(1);
+}
+
+function repairUtf8Mojibake(value) {
+  if (typeof value !== "string" || !value) return value;
+  if (/[\u4e00-\u9fff]/.test(value)) return value;
+  try {
+    const repaired = Buffer.from(value, "latin1").toString("utf8");
+    if (/[\u4e00-\u9fff]/.test(repaired) && !/\uFFFD/.test(repaired)) return repaired;
+  } catch {
+    // keep original
+  }
+  return value;
+}
+
+function repairStrings(value) {
+  if (typeof value === "string") return repairUtf8Mojibake(value);
+  if (Array.isArray(value)) return value.map(repairStrings);
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) next[key] = repairStrings(item);
+    return next;
+  }
+  return value;
+}
+
+function parseHookJson(buffer) {
+  if (!buffer.length) return {};
+  const texts = [buffer.toString("utf8"), buffer.toString("utf16le")];
+  for (const text of texts) {
+    const raw = text.replace(/^\uFEFF/, "").trim();
+    if (!raw) continue;
+    try {
+      return repairStrings(JSON.parse(raw));
+    } catch {
+      // try next encoding
+    }
+  }
+  return {};
+}
 
 function readStdin() {
   return new Promise((resolve) => {
     const chunks = [];
-    const timer = setTimeout(() => resolve({}), 400);
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => chunks.push(chunk));
-    process.stdin.on("end", () => {
+    const finish = () => {
       clearTimeout(timer);
-      const raw = chunks.join("").trim();
-      if (!raw) {
-        resolve({});
-        return;
-      }
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        resolve({});
-      }
-    });
-    process.stdin.on("error", () => {
-      clearTimeout(timer);
-      resolve({});
-    });
+      process.stdin.removeListener("data", onData);
+      process.stdin.removeListener("end", finish);
+      resolve(parseHookJson(Buffer.concat(chunks)));
+    };
+    const onData = (chunk) => chunks.push(Buffer.from(chunk));
+    const timer = setTimeout(finish, 400);
+    process.stdin.on("data", onData);
+    process.stdin.on("end", finish);
+    process.stdin.on("error", finish);
   });
 }
 
@@ -82,25 +154,72 @@ function spawnPet() {
 
 function compactPayload(payload) {
   if (!payload || typeof payload !== "object") return {};
+  const roots = payload.workspace_roots || payload.workspaceRoots;
   return {
-    cwd: payload.cwd,
-    tool_name: payload.tool_name,
-    tool_response: payload.tool_response,
-    permission_mode: payload.permission_mode,
+    cwd: payload.cwd || (Array.isArray(roots) ? roots[0] : "") || "",
+    workspace_roots: Array.isArray(roots) ? roots : undefined,
+    tool_name: payload.tool_name || payload.toolName,
+    tool_response: payload.tool_response || payload.toolResponse,
+    permission_mode: payload.permission_mode || payload.permissionMode,
   };
 }
 
+function sessionIdFor(agent, payload) {
+  const raw =
+    payload.session_id ||
+    payload.sessionId ||
+    payload.conversation_id ||
+    payload.conversationId ||
+    payload.thread_id ||
+    payload.threadId ||
+    "unknown";
+  const id = String(raw);
+  if (agent === "cursor") return id.startsWith("cursor:") ? id : `cursor:${id}`;
+  if (agent === "claude-code") return id.startsWith("claude:") ? id : `claude:${id}`;
+  if (agent === "codely-cli") return id.startsWith("codely:") ? id : `codely:${id}`;
+  return id;
+}
+
+const MODE_TITLES = new Set(["agent", "ask", "edit", "plan"]);
+
+function isPlaceholderTitle(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return !key || MODE_TITLES.has(key);
+}
+
+function firstLineTitle(value) {
+  const line = String(value || "")
+    .split(/\r?\n/)[0]
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!line || isPlaceholderTitle(line)) return "";
+  return line.length > 40 ? `${line.slice(0, 40)}…` : line;
+}
+
+function titleFor(_agent, payload) {
+  const named = firstLineTitle(
+    payload.thread_name || payload.threadName || payload.title || "",
+  );
+  if (named) return named;
+  return firstLineTitle(payload.prompt || payload.user_prompt || payload.userPrompt || "");
+}
+
+const { agent: AGENT, event: EVENT_ARG } = parseArgs(process.argv.slice(2));
+
 try {
   const payload = await readStdin();
-  const sessionId = payload.session_id || payload.sessionId || "unknown";
+  const event = normalizeEvent(EVENT_ARG, payload);
+  const sessionId = sessionIdFor(AGENT, payload);
   const body = {
     source: "hook",
-    event: EVENT || payload.hook_event_name || payload.hookEventName,
+    agent: AGENT,
+    event,
     session_id: sessionId,
+    title: titleFor(AGENT, payload),
     payload: compactPayload(payload),
   };
 
-  if (EVENT === "SessionStart") {
+  if (event === "SessionStart") {
     try {
       await post("/ensure", body);
     } catch {

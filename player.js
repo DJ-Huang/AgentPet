@@ -1,5 +1,5 @@
 (() => {
-  const FALLBACK = ["thinking:working", "working:idle", "waiting:idle", "review:idle", "failed:idle"];
+  const FALLBACK = ["working:idle", "completed:idle"];
   const FALLBACK_MAP = Object.fromEntries(FALLBACK.map((pair) => pair.split(":")));
 
   const videoA = document.getElementById("video-a");
@@ -15,12 +15,14 @@
     "zh-CN": {
       activity: "活动",
       untitled: "未命名任务",
-      states: { idle: "空闲", thinking: "思考中", working: "工作中", waiting: "等待操作", review: "完成", failed: "执行失败" },
+      agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "手动" },
+      states: { idle: "空闲", working: "工作中", completed: "完成" },
     },
     en: {
       activity: "Activity",
       untitled: "Untitled Task",
-      states: { idle: "Idle", thinking: "Thinking", working: "Working", waiting: "Awaiting Input", review: "Done", failed: "Failed" },
+      agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "Manual" },
+      states: { idle: "Idle", working: "Working", completed: "Done" },
     },
   };
 
@@ -44,6 +46,10 @@
 
   function uiText(key) {
     return TEXT[language]?.[key] ?? TEXT["zh-CN"][key] ?? key;
+  }
+
+  function agentLabel(agent) {
+    return TEXT[language]?.agents?.[agent] || TEXT["zh-CN"].agents?.[agent] || "";
   }
 
   function stateLabel(state) {
@@ -192,6 +198,8 @@
   }
 
   function stopPlayback() {
+    switching = false;
+    queued = null;
     videos.forEach((video) => {
       video.pause();
       video.removeAttribute("src");
@@ -212,7 +220,7 @@
     pendingState = null;
   }
 
-  function playState(state, { nextClip, afterEnded } = {}) {
+  function playState(state, { nextClip } = {}) {
     if (switching) {
       queued = state;
       return;
@@ -224,19 +232,6 @@
       const currentMeta = clipMeta(currentState);
       const rotates = Boolean(currentMeta.loop) && currentMeta.pick === "sequence" && urlsFor(currentState).length > 1;
       active.loop = Boolean(currentMeta.loop) && !rotates;
-      return;
-    }
-    if (
-      !nextClip &&
-      !afterEnded &&
-      currentState !== null &&
-      desiredState !== currentState &&
-      active.src &&
-      !active.ended
-    ) {
-      pendingState = state;
-      active.loop = false;
-      if (active.paused) active.play().catch(() => playState(state, { afterEnded: true }));
       return;
     }
 
@@ -278,7 +273,7 @@
       if (pendingState) {
         const next = pendingState;
         pendingState = null;
-        playState(next, { afterEnded: true });
+        playState(next);
         return;
       }
       if (rotate) {
@@ -397,9 +392,12 @@
 
         const dot = document.createElement("span");
         dot.className = "session-dot";
-        if (thread.state === "review") dot.classList.add("review");
-        else if (thread.state === "failed") dot.classList.add("failed");
+        if (thread.state === "completed") dot.classList.add("completed");
         else if (thread.state !== "idle") dot.classList.add("running");
+
+        const agent = document.createElement("span");
+        agent.className = `session-agent ${thread.agent || "codex"}`;
+        agent.textContent = agentLabel(thread.agent || "codex");
 
         const title = document.createElement("span");
         title.className = "session-title";
@@ -409,13 +407,19 @@
         label.className = "session-label";
         label.textContent = stateLabel(thread.state);
 
-        row.append(dot, title, label);
+        row.append(dot, agent, title, label);
         row.addEventListener("pointerdown", (event) => {
           event.stopPropagation();
         });
         row.addEventListener("click", (event) => {
           event.stopPropagation();
+          if (event.button !== 0) return;
           if (window.petBridge) window.petBridge.openThread(thread.id);
+        });
+        row.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (window.petBridge) window.petBridge.threadContextMenu(thread.id);
         });
         return row;
       }),
@@ -505,6 +509,8 @@
       seqIndex = {};
       currentState = null;
       pendingState = null;
+      queued = null;
+      switching = false;
       playState(data?.state || "idle");
       renderSessions(data?.threads);
     });

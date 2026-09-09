@@ -6,7 +6,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "install-hooks": "node scripts/install-codex-hooks.mjs",
+    "install-hooks:codex": "node scripts/install-codex-hooks.mjs codex",
+    "install-hooks:codely": "node scripts/install-codex-hooks.mjs codely-cli",
+    "install-hooks:cursor": "node scripts/install-codex-hooks.mjs cursor",
+    "install-hooks:claude": "node scripts/install-codex-hooks.mjs claude-code",
     "make-placeholders": "node scripts/make-placeholders.mjs"
   },
   "devDependencies": {

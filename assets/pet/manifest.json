@@ -1,12 +1,22 @@
 {
   "size": [854, 480],
-  "reviewHoldMs": 8000,
   "clips": {
-    "idle": { "file": "thinking.webm", "loop": true },
-    "thinking": { "file": "thinking.webm", "loop": true },
-    "working": { "file": "thinking.webm", "loop": true },
-    "waiting": { "file": "thinking.webm", "loop": true },
-    "review": { "file": "thinking.webm", "loop": false, "next": "idle" },
-    "failed": { "file": "thinking.webm", "loop": false, "next": "idle" }
+    "idle": {
+      "files": [
+        "../xiaotao/Videos/Idle/thinking.mp4",
+        "../xiaotao/Videos/Idle/working.mp4",
+        "../xiaotao/Videos/Idle/relaxing.mp4",
+        "../xiaotao/Videos/Idle/playfull.mp4",
+        "../xiaotao/Videos/Idle/tease-loop.mp4",
+        "../xiaotao/Videos/Idle/sofa-turn-loop.mp4",
+        "../xiaotao/Videos/Idle/come close.mp4",
+        "../xiaotao/Videos/Idle/body-stretch.mp4",
+        "../xiaotao/Videos/Idle/air kiss.mp4"
+      ],
+      "loop": true,
+      "pick": "random"
+    },
+    "working": { "file": "../xiaotao/Videos/Work/01.mp4", "loop": true },
+    "completed": { "file": "review.webm", "loop": true }
   }
 }
