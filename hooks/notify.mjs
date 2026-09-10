@@ -4,10 +4,12 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import launchControl from "../lib/launch-control.js";
+import textEncoding from "../lib/text-encoding.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const { isManualQuit } = launchControl;
+const { repairUtf8Mojibake } = textEncoding;
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 const KNOWN_AGENTS = new Set(["codex", "codely-cli", "cursor", "claude-code"]);
@@ -53,18 +55,6 @@ function normalizeEvent(event, payload) {
   if (EVENT_ALIASES[key]) return EVENT_ALIASES[key];
   if (!raw) return "";
   return raw[0].toUpperCase() + raw.slice(1);
-}
-
-function repairUtf8Mojibake(value) {
-  if (typeof value !== "string" || !value) return value;
-  if (/[\u4e00-\u9fff]/.test(value)) return value;
-  try {
-    const repaired = Buffer.from(value, "latin1").toString("utf8");
-    if (/[\u4e00-\u9fff]/.test(repaired) && !/\uFFFD/.test(repaired)) return repaired;
-  } catch {
-    // keep original
-  }
-  return value;
 }
 
 function repairStrings(value) {

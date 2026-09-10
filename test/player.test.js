@@ -56,8 +56,8 @@ class FakeElement {
     this.listeners.set(type, (this.listeners.get(type) || []).filter((item) => item !== handler));
   }
 
-  dispatch(type) {
-    for (const handler of [...(this.listeners.get(type) || [])]) handler();
+  dispatch(type, event = {}) {
+    for (const handler of [...(this.listeners.get(type) || [])]) handler(event);
   }
 
   setAttribute(name, value) {
@@ -102,12 +102,19 @@ function createPlayer({ pick, random = () => 0 }) {
   };
   let init;
   let panelPlacement;
+  let videoVisibility;
+  let videoMenuCalls = 0;
+  const dragStarts = [];
   const petBridge = {
     onInit(handler) { init = handler; },
     onState() {},
     onEffects() {},
     onLanguage() {},
     onPanelPlacement(handler) { panelPlacement = handler; },
+    onVideoVisibility(handler) { videoVisibility = handler; },
+    videoContextMenu() { videoMenuCalls += 1; },
+    dragStart(point) { dragStarts.push(point); },
+    setIgnoreMouse() {},
     setPanelHeight() {},
   };
   const document = {
@@ -137,7 +144,16 @@ function createPlayer({ pick, random = () => 0 }) {
     clips: { idle: { loop: true, pick } },
     files: { idle: ["file:///one.mp4", "file:///two.mp4", "file:///three.mp4"] },
   });
-  return { videoA: elements["video-a"], videoB: elements["video-b"], root: elements.root, panelPlacement };
+  return {
+    videoA: elements["video-a"],
+    videoB: elements["video-b"],
+    root: elements.root,
+    sessions: elements.sessions,
+    panelPlacement,
+    videoVisibility,
+    videoMenuCalls: () => videoMenuCalls,
+    dragStarts,
+  };
 }
 
 async function settlePlayback(video) {
@@ -174,4 +190,38 @@ test("activity panel can be placed above the pet", () => {
   assert.equal(root.classList.contains("panel-above"), true);
   panelPlacement({ above: false });
   assert.equal(root.classList.contains("panel-above"), false);
+});
+
+test("video visibility can switch the pet into list-only mode", () => {
+  const { root, videoVisibility } = createPlayer({ pick: "random" });
+  videoVisibility({ visible: false });
+  assert.equal(root.classList.contains("video-hidden"), true);
+  videoVisibility({ visible: true });
+  assert.equal(root.classList.contains("video-hidden"), false);
+});
+
+test("blank activity-panel space opens the video visibility menu", () => {
+  const { sessions, videoMenuCalls } = createPlayer({ pick: "random" });
+  let prevented = false;
+  sessions.dispatch("contextmenu", {
+    target: { closest() { return null; } },
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  assert.equal(videoMenuCalls(), 1);
+});
+
+test("blank activity-panel space can drag the list-only window", () => {
+  const { sessions, dragStarts } = createPlayer({ pick: "random" });
+  sessions.dispatch("pointerdown", {
+    button: 0,
+    pointerId: 1,
+    screenX: 321,
+    screenY: 654,
+    target: { closest() { return null; } },
+    preventDefault() {},
+  });
+  assert.equal(dragStarts.length, 1);
+  assert.equal(dragStarts[0].x, 321);
+  assert.equal(dragStarts[0].y, 654);
 });

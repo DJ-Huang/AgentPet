@@ -63,6 +63,10 @@
     if (activityTitle) activityTitle.textContent = uiText("activity");
   }
 
+  function applyVideoVisibility(visible) {
+    if (root) root.classList.toggle("video-hidden", !visible);
+  }
+
   function urlsFor(state) {
     const value = manifest.files?.[state];
     if (Array.isArray(value)) return value.filter(Boolean);
@@ -447,6 +451,21 @@
     if (window.petBridge) window.petBridge.dragEnd();
   }
 
+  function beginDrag(event, target) {
+    event.preventDefault();
+    dragging = true;
+    document.body.classList.add("dragging");
+    setIgnore(false);
+    try {
+      target.setPointerCapture(event.pointerId);
+    } catch {
+      // capture is best-effort
+    }
+    if (window.petBridge) {
+      window.petBridge.dragStart({ x: event.screenX, y: event.screenY });
+    }
+  }
+
   window.addEventListener("mousemove", (event) => {
     if (dragging) return;
     if (sampleRaf) return;
@@ -464,22 +483,30 @@
   stage.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     if (!hitPet(event.clientX, event.clientY)) return;
+    beginDrag(event, stage);
+  });
+
+  stage.addEventListener("contextmenu", (event) => {
+    if (!hitPet(event.clientX, event.clientY)) return;
     event.preventDefault();
-    dragging = true;
-    document.body.classList.add("dragging");
-    setIgnore(false);
-    try {
-      stage.setPointerCapture(event.pointerId);
-    } catch {
-      // capture is best-effort
-    }
-    if (window.petBridge) {
-      window.petBridge.dragStart({ x: event.screenX, y: event.screenY });
-    }
+    if (window.petBridge) window.petBridge.videoContextMenu();
+  });
+
+  sessionsPanel.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest?.(".session-row")) return;
+    beginDrag(event, sessionsPanel);
+  });
+
+  sessionsPanel.addEventListener("contextmenu", (event) => {
+    if (event.target.closest?.(".session-row")) return;
+    event.preventDefault();
+    if (window.petBridge) window.petBridge.videoContextMenu();
   });
 
   stage.addEventListener("pointerup", endDrag);
   stage.addEventListener("pointercancel", endDrag);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
   window.addEventListener("blur", endDrag);
 
   window.addEventListener(
@@ -505,6 +532,7 @@
     window.petBridge.onInit((data) => {
       manifest = data || manifest;
       applyLanguage(data?.language || language);
+      applyVideoVisibility(data?.videoVisible !== false);
       refreshVideoEffects();
       lastPick = {};
       seqIndex = {};
@@ -529,6 +557,9 @@
     });
     window.petBridge.onPanelPlacement((placement) => {
       if (root) root.classList.toggle("panel-above", Boolean(placement?.above));
+    });
+    window.petBridge.onVideoVisibility((visibility) => {
+      applyVideoVisibility(visibility?.visible !== false);
     });
   }
 })();

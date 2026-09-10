@@ -40,6 +40,7 @@ let dragOffset = null;
 let dragTimer = null;
 let panelHeight = 0;
 let panelAbove = false;
+let videoVisible = true;
 const maskJobs = new Map();
 
 const TEXT = {
@@ -54,6 +55,8 @@ const TEXT = {
     zoomOut: "缩小",
     hide: "隐藏窗口",
     show: "显示窗口",
+    hideVideo: "关闭视频",
+    showVideo: "显示视频",
     settings: "设置…",
     reload: "重新加载视频",
     quit: "退出",
@@ -79,6 +82,8 @@ const TEXT = {
     zoomOut: "Zoom Out",
     hide: "Hide Window",
     show: "Show Window",
+    hideVideo: "Hide Video",
+    showVideo: "Show Video",
     settings: "Settings…",
     reload: "Reload Videos",
     quit: "Quit",
@@ -121,6 +126,7 @@ function loadManifest() {
     pinnedId: machine ? machine.pinnedId : null,
     language,
     scale,
+    videoVisible,
   };
 }
 
@@ -218,6 +224,7 @@ function videoSize() {
 }
 
 function windowSize() {
+  if (!videoVisible) return [280, Math.max(40, panelHeight)];
   const [width, height] = videoSize();
   const extra = Math.max(0, panelHeight);
   return [Math.max(width, extra ? 280 : width), height + extra];
@@ -240,7 +247,7 @@ function applyWindowSize(previousPanelHeight = panelHeight) {
   if (bounds.width === width && bounds.height === height) return;
   setWindowBounds({
     x: bounds.x,
-    y: bounds.y + (panelAbove ? previousPanelHeight - panelHeight : 0),
+    y: bounds.y + (videoVisible && panelAbove ? previousPanelHeight - panelHeight : 0),
     width,
     height,
   });
@@ -253,7 +260,7 @@ function sendPanelPlacement() {
 }
 
 function syncPanelPlacement() {
-  if (!mainWindow || mainWindow.isDestroyed() || panelHeight <= 0) return;
+  if (!mainWindow || mainWindow.isDestroyed() || !videoVisible || panelHeight <= 0) return;
   const bounds = mainWindow.getBounds();
   const [, petHeight] = videoSize();
   const petTop = bounds.y + (panelAbove ? panelHeight : 0);
@@ -274,6 +281,32 @@ function syncPanelPlacement() {
   sendPanelPlacement();
 }
 
+function setVideoVisible(next) {
+  const visible = Boolean(next);
+  if (visible === videoVisible) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    videoVisible = visible;
+    return;
+  }
+
+  const bounds = mainWindow.getBounds();
+  const [, videoHeight] = videoSize();
+  const panelTop = videoVisible ? bounds.y + (panelAbove ? 0 : videoHeight) : bounds.y;
+  videoVisible = visible;
+  const [width, height] = windowSize();
+  setWindowBounds({
+    x: Math.round(bounds.x + bounds.width / 2 - width / 2),
+    y: Math.round(videoVisible ? panelTop - (panelAbove ? 0 : videoHeight) : panelTop),
+    width,
+    height,
+  });
+  mainWindow.webContents.send("pet:video-visibility", { visible: videoVisible });
+  if (videoVisible || panelHeight > 0) mainWindow.show();
+  else mainWindow.hide();
+  saveSettings();
+  rebuildTray();
+}
+
 function saveSettings() {
   const existing = loadSettings();
   const bounds = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
@@ -285,6 +318,7 @@ function saveSettings() {
       ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
       scale,
       language,
+      videoVisible,
       pinnedId: machine ? machine.pinnedId : existing.pinnedId || null,
     }),
   );
@@ -345,6 +379,7 @@ function sendState(snap) {
 function createWindow() {
   const saved = loadSettings();
   if (Number.isFinite(saved.scale)) scale = clampScale(saved.scale);
+  videoVisible = saved.videoVisible !== false;
   const [width, height] = windowSize();
   const bounds = restorePosition(width, height);
 
@@ -390,7 +425,9 @@ function createWindow() {
     mainWindow.webContents.send("pet:init", { ...loadManifest(), ...machine.snapshot() });
     sendPanelPlacement();
   });
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => {
+    if (videoVisible || panelHeight > 0) mainWindow.show();
+  });
   mainWindow.on("moved", () => {
     syncPanelPlacement();
     saveSettings();
@@ -546,6 +583,10 @@ function rebuildTray() {
         if (mainWindow.isVisible()) mainWindow.hide();
         else mainWindow.show();
       },
+    },
+    {
+      label: videoVisible ? text("hideVideo") : text("showVideo"),
+      click: () => setVideoVisible(!videoVisible),
     },
     {
       label: text("settings"),
@@ -744,6 +785,13 @@ if (!gotLock) {
     ]).popup({ window: BrowserWindow.fromWebContents(event.sender) || mainWindow });
   });
 
+  ipcMain.on("pet:video-menu", (event) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    Menu.buildFromTemplate([
+      { label: videoVisible ? text("hideVideo") : text("showVideo"), click: () => setVideoVisible(!videoVisible) },
+    ]).popup({ window: BrowserWindow.fromWebContents(event.sender) || mainWindow });
+  });
+
   ipcMain.on("pet:mark-read", (_event, id) => {
     if (machine) machine.markRead(id);
   });
@@ -755,6 +803,10 @@ if (!gotLock) {
     panelHeight = next;
     applyWindowSize(previous);
     syncPanelPlacement();
+    if (!videoVisible && mainWindow && !mainWindow.isDestroyed()) {
+      if (panelHeight > 0) mainWindow.show();
+      else mainWindow.hide();
+    }
   });
 
   ipcMain.on("pet:pin-thread", (_event, id) => {
@@ -792,6 +844,7 @@ if (!gotLock) {
       if (!dragOffset || !mainWindow || mainWindow.isDestroyed()) return;
       const pos = screen.getCursorScreenPoint();
       mainWindow.setPosition(Math.round(pos.x - dragOffset.x), Math.round(pos.y - dragOffset.y));
+      syncPanelPlacement();
     }, 16);
   });
 

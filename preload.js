@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("petBridge", {
   onPanelPlacement: (handler) => {
     ipcRenderer.on("pet:panel-placement", (_event, placement) => handler(placement));
   },
+  onVideoVisibility: (handler) => {
+    ipcRenderer.on("pet:video-visibility", (_event, visibility) => handler(visibility));
+  },
   onScale: (handler) => {
     ipcRenderer.on("pet:scale", (_event, scale) => handler(scale));
   },
@@ -28,6 +31,7 @@ contextBridge.exposeInMainWorld("petBridge", {
   markRead: (id) => ipcRenderer.send("pet:mark-read", id),
   openThread: (id) => ipcRenderer.send("pet:open-thread", id),
   threadContextMenu: (id) => ipcRenderer.send("pet:thread-menu", id),
+  videoContextMenu: () => ipcRenderer.send("pet:video-menu"),
   setPanelHeight: (height) => ipcRenderer.send("pet:panel-height", height),
   getClipConfig: () => ipcRenderer.invoke("clips:get"),
   addClipFiles: (state) => ipcRenderer.invoke("clips:add-files", state),

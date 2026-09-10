@@ -74,3 +74,15 @@ test("legacy runtime states collapse into the three presentation states", () => 
   state.apply({ sessionId: "legacy-thinking", state: "review" });
   assert.equal(state.snapshot().state, "completed");
 });
+
+test("repairs Cursor titles decoded as Windows-1252 mojibake", () => {
+  const state = machine();
+  state.apply({
+    sessionId: "cursor:encoding",
+    agent: "cursor",
+    state: "working",
+    title: "è¿™ä¸ªæµ‹è¯•",
+  });
+
+  assert.equal(state.snapshot().threads[0].title, "这个测试");
+});
