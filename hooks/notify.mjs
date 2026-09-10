@@ -5,11 +5,13 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import launchControl from "../lib/launch-control.js";
 import textEncoding from "../lib/text-encoding.js";
+import hookTitle from "../lib/hook-title.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const { isManualQuit } = launchControl;
 const { repairUtf8Mojibake } = textEncoding;
+const { titleFor } = hookTitle;
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 const KNOWN_AGENTS = new Set(["codex", "codely-cli", "cursor", "claude-code"]);
@@ -170,30 +172,6 @@ function sessionIdFor(agent, payload) {
   if (agent === "claude-code") return id.startsWith("claude:") ? id : `claude:${id}`;
   if (agent === "codely-cli") return id.startsWith("codely:") ? id : `codely:${id}`;
   return id;
-}
-
-const MODE_TITLES = new Set(["agent", "ask", "edit", "plan"]);
-
-function isPlaceholderTitle(value) {
-  const key = String(value || "").trim().toLowerCase();
-  return !key || MODE_TITLES.has(key);
-}
-
-function firstLineTitle(value) {
-  const line = String(value || "")
-    .split(/\r?\n/)[0]
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!line || isPlaceholderTitle(line)) return "";
-  return line.length > 40 ? `${line.slice(0, 40)}…` : line;
-}
-
-function titleFor(_agent, payload) {
-  const named = firstLineTitle(
-    payload.thread_name || payload.threadName || payload.title || "",
-  );
-  if (named) return named;
-  return firstLineTitle(payload.prompt || payload.user_prompt || payload.userPrompt || "");
 }
 
 const { agent: AGENT, event: EVENT_ARG } = parseArgs(process.argv.slice(2));

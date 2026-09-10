@@ -32,6 +32,7 @@ class FakeClassList {
 class FakeElement {
   constructor() {
     this.attributes = new Map();
+    this.dataset = {};
     this.classList = new FakeClassList();
     this.listeners = new Map();
     this.style = {
@@ -44,6 +45,7 @@ class FakeElement {
     this.videoWidth = 100;
     this.videoHeight = 100;
     this.offsetHeight = 0;
+    this.children = [];
   }
 
   addEventListener(type, handler) {
@@ -85,12 +87,12 @@ class FakeElement {
 
   pause() {}
 
-  replaceChildren() {}
+  replaceChildren(...children) { this.children = children; }
 
   append() {}
 }
 
-function createPlayer({ pick, random = () => 0 }) {
+function createPlayer({ pick, random = () => 0, threads = [] }) {
   const elements = {
     root: new FakeElement(),
     "video-a": new FakeElement(),
@@ -105,6 +107,7 @@ function createPlayer({ pick, random = () => 0 }) {
   let videoVisibility;
   let videoMenuCalls = 0;
   const dragStarts = [];
+  const openedThreads = [];
   const petBridge = {
     onInit(handler) { init = handler; },
     onState() {},
@@ -113,6 +116,7 @@ function createPlayer({ pick, random = () => 0 }) {
     onPanelPlacement(handler) { panelPlacement = handler; },
     onVideoVisibility(handler) { videoVisibility = handler; },
     videoContextMenu() { videoMenuCalls += 1; },
+    openThread(id) { openedThreads.push(id); },
     dragStart(point) { dragStarts.push(point); },
     setIgnoreMouse() {},
     setPanelHeight() {},
@@ -140,7 +144,7 @@ function createPlayer({ pick, random = () => 0 }) {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "player.js"), "utf8"), context);
   init({
     state: "idle",
-    threads: [],
+    threads,
     clips: { idle: { loop: true, pick } },
     files: { idle: ["file:///one.mp4", "file:///two.mp4", "file:///three.mp4"] },
   });
@@ -153,6 +157,8 @@ function createPlayer({ pick, random = () => 0 }) {
     videoVisibility,
     videoMenuCalls: () => videoMenuCalls,
     dragStarts,
+    sessionRows: elements["session-list"].children,
+    openedThreads,
   };
 }
 
@@ -224,4 +230,21 @@ test("blank activity-panel space can drag the list-only window", () => {
   assert.equal(dragStarts.length, 1);
   assert.equal(dragStarts[0].x, 321);
   assert.equal(dragStarts[0].y, 654);
+});
+
+test("Cursor activity is not clickable while Codex activity still opens", () => {
+  const { sessionRows, openedThreads } = createPlayer({
+    pick: "random",
+    threads: [
+      { id: "cursor:one", agent: "cursor", state: "working", title: "Cursor" },
+      { id: "codex-one", agent: "codex", state: "completed", title: "Codex" },
+    ],
+  });
+  const click = { button: 0, stopPropagation() {} };
+
+  sessionRows[0].dispatch("click", click);
+  sessionRows[1].dispatch("click", click);
+
+  assert.deepEqual(openedThreads, ["codex-one"]);
+  assert.equal(sessionRows[0].classList.contains("noninteractive"), true);
 });

@@ -391,6 +391,8 @@
       ...rows.map((thread) => {
         const row = document.createElement("div");
         row.className = "session-row";
+        const canOpen = thread.agent !== "cursor";
+        if (!canOpen) row.classList.add("noninteractive");
         if (thread.driving) row.classList.add("driving");
         if (thread.pinned) row.classList.add("pinned");
         row.dataset.id = thread.id;
@@ -416,11 +418,13 @@
         row.addEventListener("pointerdown", (event) => {
           event.stopPropagation();
         });
-        row.addEventListener("click", (event) => {
-          event.stopPropagation();
-          if (event.button !== 0) return;
-          if (window.petBridge) window.petBridge.openThread(thread.id);
-        });
+        if (canOpen) {
+          row.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (event.button !== 0) return;
+            if (window.petBridge) window.petBridge.openThread(thread.id);
+          });
+        }
         row.addEventListener("contextmenu", (event) => {
           event.preventDefault();
           event.stopPropagation();

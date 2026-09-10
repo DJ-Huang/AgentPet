@@ -86,3 +86,11 @@ test("repairs Cursor titles decoded as Windows-1252 mojibake", () => {
 
   assert.equal(state.snapshot().threads[0].title, "这个测试");
 });
+
+test("replaces an untitled Cursor placeholder with the real prompt", () => {
+  const state = machine();
+  state.apply({ sessionId: "cursor:title", agent: "cursor", state: "working", title: "Untitled Task" });
+  state.apply({ sessionId: "cursor:title", agent: "cursor", state: "working", title: "真实任务标题" });
+
+  assert.equal(state.snapshot().threads[0].title, "真实任务标题");
+});

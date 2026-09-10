@@ -499,11 +499,7 @@ function openThread(id) {
   if (!threadId) return;
   const session = machine?.sessions?.get(threadId);
   const agent = inferAgent(session?.agent, threadId);
-  if (agent === "cursor") {
-    openCursor(session?.cwd || "");
-    if (machine) machine.markRead(threadId);
-    return;
-  }
+  if (agent === "cursor") return;
   if (!THREAD_ID_RE.test(threadId)) return;
   const url = `codex://threads/${threadId}`;
   shell.openExternal(url).catch((error) => {
