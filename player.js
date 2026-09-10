@@ -230,7 +230,7 @@
     if (!nextClip && currentState === desiredState && active.src && !active.ended) {
       pendingState = null;
       const currentMeta = clipMeta(currentState);
-      const rotates = Boolean(currentMeta.loop) && currentMeta.pick === "sequence" && urlsFor(currentState).length > 1;
+      const rotates = Boolean(currentMeta.loop) && urlsFor(currentState).length > 1;
       active.loop = Boolean(currentMeta.loop) && !rotates;
       return;
     }
@@ -241,7 +241,7 @@
     const nextIndex = 1 - activeIndex;
     const hidden = videos[nextIndex];
     const meta = clipMeta(target.state);
-    const rotate = Boolean(meta.loop) && meta.pick === "sequence" && urlsFor(target.state).length > 1;
+    const rotate = Boolean(meta.loop) && urlsFor(target.state).length > 1;
     switching = true;
 
     const finish = () => {

@@ -14,7 +14,9 @@ const { getHookStatus, installHooks, uninstallHooks } = require("./lib/agent-hoo
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
-const PET_DIR = path.join(__dirname, "assets", "pet");
+// Default clips live with Hana's bundled videos. Manifest entries resolve relative to this folder.
+const PET_DIR = path.join(__dirname, "assets", "hana");
+const APP_ICON = path.join(PET_DIR, "app-icon.ico");
 const SETTINGS_FILE = path.join(app.getPath("userData"), "window-position.json");
 const CLIP_CONFIG_FILE = path.join(app.getPath("userData"), "clip-config.json");
 const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
@@ -306,6 +308,7 @@ function createWindow() {
   const bounds = restorePosition(width, height);
 
   mainWindow = new BrowserWindow({
+    icon: APP_ICON,
     x: bounds.x,
     y: bounds.y,
     width,
@@ -333,6 +336,11 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  mainWindow.setIcon(APP_ICON);
+  mainWindow.setAppDetails({
+    appId: "codex-video-pet",
+    appIconPath: APP_ICON,
+  });
   mainWindow.loadFile(path.join(__dirname, "pet.html"));
 
   mainWindow.webContents.on("did-finish-load", () => {
@@ -346,8 +354,10 @@ function createWindow() {
 }
 
 function trayImage() {
-  const iconPath = path.join(__dirname, "assets", "tray.png");
-  if (fs.existsSync(iconPath)) return nativeImage.createFromPath(iconPath);
+  if (fs.existsSync(APP_ICON)) {
+    const icon = nativeImage.createFromPath(APP_ICON);
+    if (!icon.isEmpty()) return icon;
+  }
   return nativeImage.createFromDataURL(
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPUlEQVQ4T2NkYGD4z0ABYBw1gGE0DBhGQ58BCgoK/5EFGRgY/qMrRhZjYGD4j66YEbeJ2BRjuAHbZqJ7gXQwDAAA0r4H/6F9yH8AAAAASUVORK5CYII=",
   );
@@ -515,6 +525,7 @@ function createSettingsWindow() {
     return;
   }
   settingsWindow = new BrowserWindow({
+    icon: APP_ICON,
     width: 560,
     height: 740,
     minWidth: 440,
@@ -527,6 +538,11 @@ function createSettingsWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  settingsWindow.setIcon(APP_ICON);
+  settingsWindow.setAppDetails({
+    appId: "codex-video-pet",
+    appIconPath: APP_ICON,
   });
   settingsWindow.setMenuBarVisibility(false);
   settingsWindow.loadFile(path.join(__dirname, "settings.html"));

@@ -1,0 +1,32 @@
+{
+  "size": [854, 480],
+  "clips": {
+    "idle": {
+      "files": [
+        "Videos/Idle/thinking.mp4",
+        "Videos/Idle/working.mp4",
+        "Videos/Idle/relaxing.mp4",
+        "Videos/Idle/playfull.mp4",
+        "Videos/Idle/tease-loop.mp4",
+        "Videos/Idle/sofa-turn-loop.mp4",
+        "Videos/Idle/come close.mp4",
+        "Videos/Idle/body-stretch.mp4"
+      ],
+      "loop": true,
+      "pick": "random"
+    },
+    "working": {
+      "files": [
+        "Videos/Work/01.mp4",
+        "Videos/Work/02.mp4",
+        "Videos/Work/03.mp4"
+      ],
+      "loop": true,
+      "pick": "random"
+    },
+    "completed": {
+      "file": "Videos/Work/03.mp4",
+      "loop": true
+    }
+  }
+}

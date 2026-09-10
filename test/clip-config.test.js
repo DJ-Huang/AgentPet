@@ -7,6 +7,19 @@ const os = require("node:os");
 const path = require("node:path");
 const { loadClipConfig } = require("../lib/clip-config");
 
+test("bundled Hana manifest resolves videos relative to its own directory", () => {
+  const petDir = path.join(__dirname, "..", "assets", "hana");
+  const config = loadClipConfig({
+    petDir,
+    userConfigPath: path.join(os.tmpdir(), `destokpet-no-user-config-${Date.now()}.json`),
+  });
+
+  assert.deepEqual(config.missing, { idle: [], working: [], completed: [] });
+  assert.equal(config.files.idle.length, 8);
+  assert.equal(config.files.working.length, 3);
+  assert.equal(config.files.completed.length, 1);
+});
+
 test("empty legacy review config does not suppress the completed default", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "destokpet-clips-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

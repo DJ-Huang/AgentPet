@@ -1,8 +1,26 @@
-# Codex Video Pet
+# Hana — AI Agent Desktop Pet
 
-Windows 透明置顶视频桌宠。读本机 Codex 线程列表驱动动画：宠物旁和托盘显示会话标题与状态；动画只使用空闲、工作、完成三种状态。Hooks 只是可选加速，不信任时列表和动画仍会工作。
+<p align="center">
+  <img src="assets/hana/work.png" alt="Hana, the AI agent desktop pet" width="520" />
+</p>
 
-## 启动
+![Hana showcase](docs/images/01.gif)
+
+---
+
+## What Hana does
+
+| Your agent | Hana |
+| --- | --- |
+| Is idle | Plays a calm idle animation |
+| Thinks, receives a prompt, or calls a tool | Switches to a working animation |
+| Completes or fails a task | Shows a completion animation until you acknowledge it |
+
+Hana is more than a status indicator. Her panel lists up to eight recent agent sessions, including their title and status. Pin a session to keep it in focus, or let Hana automatically follow the most recently active session.
+
+## Quick start
+
+**Requirements:** Windows, Node.js, and an AI coding agent with hooks or command callbacks.
 
 ```powershell
 cd D:\Project\My\DestokPet
@@ -11,80 +29,156 @@ npm run make-placeholders
 npm start
 ```
 
-启动后桌面右下会出现透明窗。**视频下方是最近 8 条 Codex 会话**（标题 + 状态点）。绿点表示跑着，紫点回顾，灰点空闲；高亮的是当前驱动动画的那条。点击可钉住，再点取消，回到跟随最近活跃。**按住角色即可拖动**。托盘同样有会话列表和钉住；指针在角色上时 **Ctrl + 滚轮** 缩放（只缩放视频，面板高度固定）。
+The pet appears as a transparent window near the bottom-right of your desktop. It is useful immediately for Codex local-session monitoring; install hooks to receive real-time updates from supported agents.
 
-本机 HTTP 默认监听 `127.0.0.1:17331`。`GET /sessions` 可看当前线程快照。
+## User guide
 
-## 数据源
+### Daily controls
 
-不依赖 `/hooks` 信任：
+- **Move Hana:** hold the left mouse button on the character and drag.
+- **Resize Hana:** point at the character, hold `Ctrl`, and scroll the mouse wheel.
+- **Focus a session:** click a session below the video to pin it; click again to unpin and resume automatic following.
+- **Open the source task:** click a Codex session to open it in Codex, or a Cursor session to return to its workspace.
+- **Use the tray menu:** right-click the Hana tray icon to view sessions, change settings, reload videos, hide/show the pet, or quit.
 
-- 标题：`%USERPROFILE%\.codex\session_index.jsonl`（`id` / `thread_name` / `updated_at`，同一 id 后写覆盖）
-- 是否在跑：tail `%USERPROFILE%\.codex\sessions\**\*.jsonl`
-  - `task_started` / `Reasoning` / `CommandExecution` / 工具 → working
-  - `task_complete` → completed
-- 线程 ID 取 rollout 文件名里的 **第一个** UUID（thread id），与 `session_index` 对齐，而不是文件名末尾的 turn id。
+### Understanding states
 
-视频状态始终从活动列表计算，固定优先级为 `working > completed > idle`：只要任意活动仍在工作，就播放工作视频；没有工作活动但列表里还有未读完成项，就播放完成视频；两类活动都没有才播放空闲视频。思考、执行工具和等待操作都归入“工作”，失败结束也归入“完成”，不会产生第四种视频状态。完成视频播完或收到 `SessionEnd` 都不会擅自清掉完成态；打开或移除对应活动后，列表中没有完成项才回空闲。
+Hana uses three presentation states: `idle`, `working`, and `completed`.
 
-## 可选：安装 Codex Hooks
+- `working` has priority whenever any observed task is active.
+- `completed` remains visible while a task is still unread, so a finished task does not disappear before you notice it.
+- `idle` is used when no active or unread-completed task remains.
 
-会**整份替换** `%USERPROFILE%\.codex\hooks.json`（先备份为 `hooks.json.bak-<时间戳>`）。`config.toml` 里 `[features].hooks = true` 已开，不用改。未信任时会话列表和动画仍走上面的本机线程。
+The local companion service listens only on `127.0.0.1:17331`. Open `http://127.0.0.1:17331/sessions` to inspect its current session snapshot.
+
+## Connect an agent
+
+Hana is designed for **any agent that can invoke a local command or send an HTTP request from a hook**. Built-in installers currently support the following agents:
+
+| Agent | Install command | What is changed |
+| --- | --- | --- |
+| Codex | `npm run install-hooks:codex` | Merges Hana handlers into `~/.codex/hooks.json` |
+| Cursor | `npm run install-hooks:cursor` | Merges handlers into `~/.cursor/hooks.json` |
+| Codely CLI | `npm run install-hooks:codely` | Installs a `desktop-pet` extension and enables hooks |
+| Claude Code | `npm run install-hooks:claude` | Merges handlers into `~/.claude/settings.json` |
+| All supported agents | `npm run install-hooks` | Installs every integration above |
+
+The installer backs up an existing configuration before writing and preserves unrelated hooks. Restart the target agent afterwards. Codex and Claude Code may ask you to run `/hooks` and trust the new command; Cursor normally reloads its user hooks automatically.
+
+### Connect another hook-capable agent
+
+For an agent without a built-in installer, configure its hook to send a JSON `POST` to Hana's local endpoint. Use `/ensure` for a session start so the pet is launched when needed; use `/state` for all other events.
 
 ```powershell
-npm run install-hooks
+$body = @{
+  source = "hook"
+  agent = "codex"
+  event = "UserPromptSubmit"
+  session_id = "my-agent-session-42"
+  title = "Implement the settings screen"
+  payload = @{ cwd = "D:\\Projects\\my-app" }
+} | ConvertTo-Json -Depth 3
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:17331/state" `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
-改完后必须在 Codex 里跑 **`/hooks` 重新信任**。命令 hash 变了会被跳过。
+Supported state-driving events are `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`, `StopFailure`, `Interrupt`, `SessionEnd`, and `SubagentStop`.
 
-Hook 映射：
+For a generic integration, send `agent: "codex"` in the payload so the current UI can render the session label. The transport is local-only and the payload can be as small as `event` plus `session_id`.
 
-| 事件 | 状态 |
-|------|------|
-| `SessionStart` | 确保桌宠在跑，不强制切片 |
-| `UserPromptSubmit` | working |
-| `PreToolUse` / `PostToolUse` | working |
-| `PermissionRequest` | working（只观察，stdout `{}`） |
-| `Stop` / `StopFailure` | completed |
-| `Interrupt` / `SessionEnd` | idle |
+## Settings walkthrough
 
-`hooks/notify.cmd` 只做：读 stdin → POST JSON → 立刻输出 `{}` 退出。fail-open，不拦截权限请求。
+Open **Desktop Pet Settings** from the tray menu to manage agent integrations, status videos, and visual effects. The following two sections cover the settings most people configure first.
 
-## 换成角色成片
+### Agent integrations
 
-把 WebM 放到 `assets/pet/`，文件名与 `assets/pet/manifest.json` 一致：
+![Agent integration settings](docs/images/agent-settings.png)
+
+The **Agents** tab shows the integration status and configuration location for every built-in agent. Use **Configure All** to add Hana hooks to all supported agents at once, or use **Install / Update** on an individual card to configure just one.
+
+- **Installed** means every Hana hook for that agent is present.
+- **Partial** means only some required hooks are configured; use **Install / Update** to repair the integration.
+- **Remove** removes Hana's hooks while preserving unrelated hooks and settings.
+- If your agent asks for confirmation after installation, run its `/hooks` command and trust the Hana notification command.
+
+### Status videos
+
+![Status video settings](docs/images/status-videos.png)
+
+The **Status Videos** tab controls the animations assigned to `Idle`, `Working`, and `Done` states.
+
+1. Choose **Random** to pick a different clip after each completed loop, or select sequential playback when you want a fixed order.
+2. Select **Add Video** to add a clip to a state.
+3. Use **Move Up** and **Move Down** to change the sequence order.
+4. Use **Generate Mask** for a normal video with a background; the generated mask makes Hana's silhouette blend into the transparent desktop window.
+5. Use **Remove** to stop using a clip, or **Restore Default** to return that state to its bundled configuration.
+
+## Customize Hana
+
+Open **Desktop Pet Settings** from the tray menu to configure clips for these states:
+
+| State | Purpose |
+| --- | --- |
+| `idle` | Waiting and ambient moments |
+| `working` | Focused work moments |
+| `completed` | Acknowledging completed work |
+
+Each state can contain multiple clips and can loop, play randomly, or play in sequence. For normal videos with a background, use **Generate Mask** in the settings window to create a soft alpha mask around the person. The original video is never modified.
+
+To edit the default clip set directly, update [`assets/pet/manifest.json`](assets/pet/manifest.json):
 
 ```json
 {
-  "size": [360, 360],
+  "size": [854, 480],
   "clips": {
+    "idle": { "files": ["idle-01.webm", "idle-02.webm"], "loop": true, "pick": "random" },
     "working": { "file": "working.webm", "loop": true },
-    "completed": { "file": "completed.webm", "loop": true },
-    "idle": { "file": "idle.webm", "loop": true }
+    "completed": { "file": "completed.webm", "loop": true }
   }
 }
 ```
 
-`working` 或 `completed` 缺文件时回退到 `idle`，不会改变活动列表里的真实状态。
+If a `working` or `completed` clip is unavailable, Hana falls back to `idle` without changing the real task status.
 
-推荐编码（透明 WebM）：
+### Video and mask recommendations
+
+For transparent video, use WebM VP9:
 
 ```powershell
-ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -an idle.webm
+ffmpeg -i input.mov -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -an output.webm
 ```
 
-## 为普通视频生成角色 Mask
-
-在“桌宠视频设置”中，每个视频行都有“生成 Mask”按钮。它会分析人物在整段视频中的活动范围，生成一张人物 SDF Alpha Mask，并在播放时自动应用；原视频不会被改写。播放器还会实时计算视频到窗口四边的距离并叠加羽化，因此无论人物是否贴近边缘，窗口轮廓都不会硬切。
-
-首次使用前，请确保系统的 `python` 命令可用，并安装生成器依赖。桌宠会优先使用 NVIDIA CUDA GPU；GPU 运行时不可用时会自动退回 CPU：
+To generate masks from ordinary video, ensure `python` is available and install:
 
 ```powershell
 python -m pip install rembg onnxruntime-gpu opencv-python-headless pillow
 ```
 
-`onnxruntime-gpu` 还需要本机安装与其版本匹配的 NVIDIA CUDA 运行时（当前版本需要 CUDA 13 的 `cublasLt64_13.dll`）。仅安装显卡驱动不足以启用 GPU；缺少该运行时时，生成器会提示原因并自动改用 CPU。
+The generator prefers NVIDIA CUDA when a compatible runtime is available, then falls back to CPU. The current GPU runtime also needs the CUDA libraries required by your installed `onnxruntime-gpu` version.
 
-生成的 Mask 会保存在应用数据目录，和该视频路径自动关联。删除或移动原视频后，该关联不会再生效。
+## Troubleshooting
 
-**WebM VP9 + yuva420p，必须带 `-auto-alt-ref 0`。** 第一版仓库里是纯色透明短循环占位，方便先接线。
+| Problem | What to try |
+| --- | --- |
+| Hana does not appear | Run `npm start`; then check that Electron installed successfully with `npm install`. |
+| The pet does not react to an agent | Install the matching integration, restart the agent, and trust the hook command if prompted. |
+| The hook command is reported as untrusted | Run `/hooks` in Codex or Claude Code and approve the Hana command. |
+| A video does not play | Open Desktop Pet Settings and check for a missing clip path. Hana skips missing files. |
+| Mask generation is slow or fails | Confirm Python and the listed dependencies are installed. CUDA is optional; CPU fallback is automatic. |
+| The wrong session drives the animation | Click the desired session to pin it, then click again to return to automatic selection. |
+
+## Development
+
+```powershell
+npm test       # Run the Node.js test suite
+npm start      # Launch Hana
+```
+
+---
+
+<p align="center">
+  <sub>Made for focused workdays, with Hana by your side.</sub>
+</p>

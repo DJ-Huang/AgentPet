@@ -3,20 +3,20 @@
   "clips": {
     "idle": {
       "files": [
-        "../xiaotao/Videos/Idle/thinking.mp4",
-        "../xiaotao/Videos/Idle/working.mp4",
-        "../xiaotao/Videos/Idle/relaxing.mp4",
-        "../xiaotao/Videos/Idle/playfull.mp4",
-        "../xiaotao/Videos/Idle/tease-loop.mp4",
-        "../xiaotao/Videos/Idle/sofa-turn-loop.mp4",
-        "../xiaotao/Videos/Idle/come close.mp4",
-        "../xiaotao/Videos/Idle/body-stretch.mp4",
-        "../xiaotao/Videos/Idle/air kiss.mp4"
+        "../hana/Videos/Idle/thinking.mp4",
+        "../hana/Videos/Idle/working.mp4",
+        "../hana/Videos/Idle/relaxing.mp4",
+        "../hana/Videos/Idle/playfull.mp4",
+        "../hana/Videos/Idle/tease-loop.mp4",
+        "../hana/Videos/Idle/sofa-turn-loop.mp4",
+        "../hana/Videos/Idle/come close.mp4",
+        "../hana/Videos/Idle/body-stretch.mp4",
+        "../hana/Videos/Idle/air kiss.mp4"
       ],
       "loop": true,
       "pick": "random"
     },
-    "working": { "file": "../xiaotao/Videos/Work/01.mp4", "loop": true },
+    "working": { "file": "../hana/Videos/Work/01.mp4", "loop": true },
     "completed": { "file": "review.webm", "loop": true }
   }
 }
