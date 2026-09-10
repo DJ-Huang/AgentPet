@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld("petBridge", {
   updateMaskEffects: (patch) => ipcRenderer.invoke("effects:update", patch),
   updateLanguage: (language) => ipcRenderer.invoke("settings:update-language", language),
   updateScale: (percent) => ipcRenderer.invoke("settings:update-scale", percent),
+  updateMousePassthrough: (enabled) => ipcRenderer.invoke("settings:update-mouse-passthrough", enabled),
   restoreClipState: (state) => ipcRenderer.invoke("clips:restore", state),
   getHookStatus: () => ipcRenderer.invoke("hooks:status"),
   installHooks: (agentId) => ipcRenderer.invoke("hooks:install", agentId),

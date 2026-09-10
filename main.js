@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, dialog, shell, globalShortcut } = require("electron");
 const { spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -25,6 +25,7 @@ const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 2;
 const SCALE_STEP = 0.01;
+const VIDEO_TOGGLE_SHORTCUT = "Alt+V";
 const THREAD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 let mainWindow = null;
@@ -41,6 +42,7 @@ let dragTimer = null;
 let panelHeight = 0;
 let panelAbove = false;
 let videoVisible = true;
+let mousePassthrough = true;
 const maskJobs = new Map();
 
 const TEXT = {
@@ -127,6 +129,7 @@ function loadManifest() {
     language,
     scale,
     videoVisible,
+    mousePassthrough,
   };
 }
 
@@ -307,6 +310,12 @@ function setVideoVisible(next) {
   rebuildTray();
 }
 
+function applyMousePassthrough() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mousePassthrough) mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  else mainWindow.setIgnoreMouseEvents(false);
+}
+
 function saveSettings() {
   const existing = loadSettings();
   const bounds = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
@@ -319,6 +328,7 @@ function saveSettings() {
       scale,
       language,
       videoVisible,
+      mousePassthrough,
       pinnedId: machine ? machine.pinnedId : existing.pinnedId || null,
     }),
   );
@@ -380,6 +390,7 @@ function createWindow() {
   const saved = loadSettings();
   if (Number.isFinite(saved.scale)) scale = clampScale(saved.scale);
   videoVisible = saved.videoVisible !== false;
+  mousePassthrough = saved.mousePassthrough !== false;
   const [width, height] = windowSize();
   const bounds = restorePosition(width, height);
 
@@ -411,7 +422,7 @@ function createWindow() {
 
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  applyMousePassthrough();
   if (process.platform !== "darwin") mainWindow.setIcon(APP_ICON);
   if (process.platform === "win32") {
     mainWindow.setAppDetails({
@@ -701,6 +712,9 @@ if (!gotLock) {
     await startServices();
     createWindow();
     createTray();
+    if (!globalShortcut.register(VIDEO_TOGGLE_SHORTCUT, () => setVideoVisible(!videoVisible))) {
+      console.warn(`[codex-video-pet] shortcut unavailable: ${VIDEO_TOGGLE_SHORTCUT}`);
+    }
   });
 
   ipcMain.handle("clips:get", () => loadManifest());
@@ -745,6 +759,13 @@ if (!gotLock) {
 
   ipcMain.handle("settings:update-scale", (_event, percent) => {
     setScale(Number(percent) / 100);
+    return loadManifest();
+  });
+
+  ipcMain.handle("settings:update-mouse-passthrough", (_event, next) => {
+    mousePassthrough = next !== false;
+    if (!dragOffset) applyMousePassthrough();
+    saveSettings();
     return loadManifest();
   });
 
@@ -817,7 +838,7 @@ if (!gotLock) {
 
   ipcMain.on("pet:ignore-mouse", (_event, ignore) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (dragOffset) return;
+    if (!mousePassthrough || dragOffset) return;
     if (ignore) mainWindow.setIgnoreMouseEvents(true, { forward: true });
     else mainWindow.setIgnoreMouseEvents(false);
   });
@@ -850,6 +871,7 @@ if (!gotLock) {
       clearInterval(dragTimer);
       dragTimer = null;
     }
+    applyMousePassthrough();
     saveSettings();
   });
 
@@ -864,6 +886,10 @@ if (!gotLock) {
     if (sessionCatalog) sessionCatalog.stop();
     if (jsonlWatcher) jsonlWatcher.stop();
     if (httpServer) httpServer.close();
+  });
+
+  app.on("will-quit", () => {
+    globalShortcut.unregister(VIDEO_TOGGLE_SHORTCUT);
   });
 }
 

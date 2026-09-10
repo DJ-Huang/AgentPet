@@ -12,6 +12,9 @@
       language: "界面语言",
       windowScale: "桌宠缩放",
       windowScaleHelp: "可在 10%–200% 之间连续调节，也可按住 Ctrl/Command 滚动鼠标滚轮。",
+      mousePassthrough: "允许鼠标穿透",
+      mousePassthroughHelp: "开启后，鼠标可穿过桌宠的透明区域操作下方窗口；关闭后，桌宠窗口会接收范围内的鼠标操作。",
+      videoToggleShortcut: "视频显隐快捷键：Alt + V。",
       agentsHelp: "会把桌宠通知 Hook 合并进各 Agent 的用户配置，不会整份覆盖已有 Hook。安装后如需信任，请在对应 Agent 里运行 /hooks。",
       installAllHooks: "一键配置全部",
       uninstallAllHooks: "全部移除",
@@ -65,6 +68,9 @@
       language: "Language",
       windowScale: "Pet Scale",
       windowScaleHelp: "Adjust continuously from 10% to 200%, or hold Ctrl/Command while scrolling the mouse wheel.",
+      mousePassthrough: "Allow Mouse Click-Through",
+      mousePassthroughHelp: "When enabled, the pointer can pass through transparent pet areas to the window underneath. When disabled, the pet window receives pointer input within its bounds.",
+      videoToggleShortcut: "Show/hide video shortcut: Alt + V.",
       agentsHelp: "Merges the desktop-pet notify hook into each agent's user config without replacing existing hooks. If trust is required, run /hooks in that agent.",
       installAllHooks: "Configure All",
       uninstallAllHooks: "Remove All",
@@ -113,6 +119,7 @@
   const languageInput = document.getElementById("language");
   const scaleInput = document.getElementById("window-scale");
   const scaleValue = document.getElementById("window-scale-value");
+  const mousePassthroughInput = document.getElementById("mouse-passthrough");
   const edgeFadeInput = document.getElementById("edge-fade-percent");
   const edgeFadeValue = document.getElementById("edge-fade-percent-value");
   const overallInput = document.getElementById("overall-opacity");
@@ -242,6 +249,10 @@
     if (scaleValue) scaleValue.textContent = `${percent}%`;
   }
 
+  function renderMousePassthrough() {
+    if (mousePassthroughInput) mousePassthroughInput.checked = config.mousePassthrough !== false;
+  }
+
   function render() {
     if (!root) return;
     root.replaceChildren(
@@ -340,6 +351,7 @@
     render();
     renderEffects();
     renderScale();
+    renderMousePassthrough();
     renderAgents();
   }
 
@@ -457,6 +469,15 @@
           window.alert(error?.message || t("saveScaleFailed"));
         });
       }
+    });
+  }
+
+  if (mousePassthroughInput) {
+    mousePassthroughInput.addEventListener("change", () => {
+      if (!window.petBridge) return;
+      window.petBridge.updateMousePassthrough(mousePassthroughInput.checked).then(apply).catch((error) => {
+        window.alert(error?.message || "Failed to update mouse click-through");
+      });
     });
   }
 
