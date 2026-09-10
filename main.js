@@ -740,6 +740,8 @@ function createSettingsWindow() {
 
 function createTray() {
   tray = new Tray(trayImage());
+  // macOS menu-bar icons from a dark portrait are easy to miss; show a label.
+  if (process.platform === "darwin") tray.setTitle("Hana");
   rebuildTray();
   tray.on("double-click", () => {
     if (!mainWindow) return;
@@ -906,6 +908,7 @@ if (!gotLock) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     Menu.buildFromTemplate([
       { label: videoVisible ? text("hideVideo") : text("showVideo"), click: () => setVideoVisible(!videoVisible) },
+      { label: text("settings"), click: () => createSettingsWindow() },
     ]).popup({ window: BrowserWindow.fromWebContents(event.sender) || mainWindow });
   });
 

@@ -36,7 +36,7 @@ Hana is more than a status indicator. Her panel lists up to eight recent agent s
 For the easiest start, use the launcher for your platform from the project root:
 
 - **Windows:** double-click `start-hana-windows.cmd`
-- **macOS:** run `chmod +x start-hana-macos.command` once, then double-click `start-hana-macos.command`
+- **macOS:** run `./start-hana-macos.sh`
 
 Or start Hana manually:
 
@@ -56,7 +56,7 @@ The pet appears as a transparent window near the bottom-right of your desktop. I
 - **Resize Hana:** point at the character, hold `Ctrl`, and scroll the mouse wheel.
 - **Focus a session:** click a session below the video to pin it; click again to unpin and resume automatic following.
 - **Open the source task:** click a Codex session to open it in Codex, or a Cursor session to return to its workspace.
-- **Use the tray menu:** right-click the Hana tray icon to view sessions, change settings, reload videos, hide/show the pet, or quit.
+- **Use the tray menu:** click the Hana tray icon (on macOS it shows the label **Hana** in the menu bar) to view sessions, change settings, reload videos, hide/show the pet, or quit. You can also right-click the pet and choose **Settings…**.
 
 ### Understanding states
 
