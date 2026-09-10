@@ -108,6 +108,7 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
   let videoMenuCalls = 0;
   const dragStarts = [];
   const openedThreads = [];
+  const dismissedThreads = [];
   const petBridge = {
     onInit(handler) { init = handler; },
     onState() {},
@@ -117,6 +118,7 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
     onVideoVisibility(handler) { videoVisibility = handler; },
     videoContextMenu() { videoMenuCalls += 1; },
     openThread(id) { openedThreads.push(id); },
+    dismissThread(id) { dismissedThreads.push(id); },
     dragStart(point) { dragStarts.push(point); },
     setIgnoreMouse() {},
     setPanelHeight() {},
@@ -159,6 +161,7 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
     dragStarts,
     sessionRows: elements["session-list"].children,
     openedThreads,
+    dismissedThreads,
   };
 }
 
@@ -247,4 +250,52 @@ test("Cursor activity is not clickable while Codex activity still opens", () => 
 
   assert.deepEqual(openedThreads, ["codex-one"]);
   assert.equal(sessionRows[0].classList.contains("noninteractive"), true);
+});
+
+test("dragging an activity right past the threshold dismisses it without opening", () => {
+  const { sessionRows, openedThreads, dismissedThreads } = createPlayer({
+    pick: "random",
+    threads: [{ id: "codex-swipe", agent: "codex", state: "working", title: "Swipe me" }],
+  });
+  const row = sessionRows[0];
+  const event = (clientX) => ({
+    button: 0,
+    pointerId: 7,
+    clientX,
+    stopPropagation() {},
+    preventDefault() {},
+  });
+
+  row.dispatch("pointerdown", event(10));
+  row.dispatch("pointermove", event(90));
+  row.dispatch("pointerup", event(90));
+  row.dispatch("click", event(90));
+
+  assert.deepEqual(dismissedThreads, ["codex-swipe"]);
+  assert.deepEqual(openedThreads, []);
+  assert.equal(row.classList.contains("dismissing"), true);
+});
+
+test("a short activity drag snaps back and does not dismiss or open", () => {
+  const { sessionRows, openedThreads, dismissedThreads } = createPlayer({
+    pick: "random",
+    threads: [{ id: "codex-short-swipe", agent: "codex", state: "working", title: "Keep me" }],
+  });
+  const row = sessionRows[0];
+  const event = (clientX) => ({
+    button: 0,
+    pointerId: 8,
+    clientX,
+    stopPropagation() {},
+    preventDefault() {},
+  });
+
+  row.dispatch("pointerdown", event(10));
+  row.dispatch("pointermove", event(30));
+  row.dispatch("pointerup", event(30));
+  row.dispatch("click", event(30));
+
+  assert.deepEqual(dismissedThreads, []);
+  assert.deepEqual(openedThreads, []);
+  assert.equal(row.style.transform, "");
 });

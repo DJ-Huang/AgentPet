@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("petBridge", {
   pinThread: (id) => ipcRenderer.send("pet:pin-thread", id),
   markRead: (id) => ipcRenderer.send("pet:mark-read", id),
   openThread: (id) => ipcRenderer.send("pet:open-thread", id),
+  dismissThread: (id) => ipcRenderer.send("pet:dismiss-thread", id),
   threadContextMenu: (id) => ipcRenderer.send("pet:thread-menu", id),
   videoContextMenu: () => ipcRenderer.send("pet:video-menu"),
   setPanelHeight: (height) => ipcRenderer.send("pet:panel-height", height),

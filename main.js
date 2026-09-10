@@ -789,6 +789,11 @@ if (!gotLock) {
     openThread(id);
   });
 
+  ipcMain.on("pet:dismiss-thread", (_event, id) => {
+    const threadId = String(id || "");
+    if (threadId && machine) machine.dismissThread(threadId);
+  });
+
   ipcMain.on("pet:thread-menu", (event, id) => {
     const threadId = String(id || "");
     if (!threadId || !machine || !mainWindow || mainWindow.isDestroyed()) return;

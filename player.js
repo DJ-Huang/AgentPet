@@ -11,6 +11,9 @@
   const maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
   const maskImages = new Map();
   const DEFAULT_EFFECTS = { edgeFadePercent: 12, overallOpacity: 80 };
+  const SWIPE_START_PX = 6;
+  const SWIPE_DISMISS_MIN_PX = 64;
+  const SWIPE_DISMISS_MAX_PX = 120;
   const TEXT = {
     "zh-CN": {
       activity: "活动",
@@ -416,12 +419,74 @@
         label.textContent = stateLabel(thread.state);
 
         row.append(dot, agent, title, label);
+        let swipe = null;
+        let suppressClick = false;
+
+        function resetSwipe() {
+          row.classList.remove("swiping");
+          row.style.transform = "";
+          row.style.opacity = "";
+        }
+
         row.addEventListener("pointerdown", (event) => {
           event.stopPropagation();
+          if (event.button !== 0) return;
+          swipe = { pointerId: event.pointerId, startX: event.clientX, deltaX: 0 };
+          suppressClick = false;
+          try {
+            row.setPointerCapture(event.pointerId);
+          } catch {
+            // Pointer capture is best-effort.
+          }
+        });
+        row.addEventListener("pointermove", (event) => {
+          if (!swipe || event.pointerId !== swipe.pointerId) return;
+          swipe.deltaX = Math.max(0, event.clientX - swipe.startX);
+          if (swipe.deltaX < SWIPE_START_PX) {
+            if (suppressClick) {
+              row.style.transform = `translateX(${swipe.deltaX}px)`;
+              row.style.opacity = "1";
+            }
+            return;
+          }
+          suppressClick = true;
+          event.preventDefault();
+          row.classList.add("swiping");
+          row.style.transform = `translateX(${swipe.deltaX}px)`;
+          const width = Math.max(1, row.getBoundingClientRect().width);
+          row.style.opacity = String(Math.max(0.28, 1 - swipe.deltaX / width));
+        });
+        row.addEventListener("pointerup", (event) => {
+          if (!swipe || event.pointerId !== swipe.pointerId) return;
+          const deltaX = swipe.deltaX;
+          swipe = null;
+          const width = Math.max(1, row.getBoundingClientRect().width);
+          const threshold = Math.min(SWIPE_DISMISS_MAX_PX, Math.max(SWIPE_DISMISS_MIN_PX, width * 0.3));
+          row.classList.remove("swiping");
+          if (deltaX >= threshold) {
+            suppressClick = true;
+            row.classList.add("dismissing");
+            row.style.transform = `translateX(${Math.max(width, deltaX)}px)`;
+            row.style.opacity = "0";
+            if (window.petBridge) window.petBridge.dismissThread(thread.id);
+          } else {
+            resetSwipe();
+          }
+        });
+        row.addEventListener("pointercancel", () => {
+          if (!swipe) return;
+          suppressClick = swipe.deltaX >= SWIPE_START_PX;
+          swipe = null;
+          resetSwipe();
         });
         if (canOpen) {
           row.addEventListener("click", (event) => {
             event.stopPropagation();
+            if (suppressClick) {
+              suppressClick = false;
+              event.preventDefault();
+              return;
+            }
             if (event.button !== 0) return;
             if (window.petBridge) window.petBridge.openThread(thread.id);
           });

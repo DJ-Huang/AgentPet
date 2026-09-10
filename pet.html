@@ -92,6 +92,17 @@
         border-radius: 4px;
         font-size: 12px;
         cursor: pointer;
+        touch-action: pan-y;
+        user-select: none;
+        transition: transform 160ms ease, opacity 160ms ease;
+        will-change: transform;
+      }
+      .session-row.swiping {
+        transition: none;
+      }
+      .session-row.dismissing {
+        opacity: 0;
+        pointer-events: none;
       }
       .session-row:hover {
         background: rgba(255, 255, 255, 0.08);
