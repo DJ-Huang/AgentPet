@@ -42,11 +42,16 @@ contextBridge.exposeInMainWorld("petBridge", {
   updateLanguage: (language) => ipcRenderer.invoke("settings:update-language", language),
   updateScale: (percent) => ipcRenderer.invoke("settings:update-scale", percent),
   updateMousePassthrough: (enabled) => ipcRenderer.invoke("settings:update-mouse-passthrough", enabled),
+  updateExcludedApps: (apps) => ipcRenderer.invoke("settings:update-excluded-apps", apps),
+  listApps: () => ipcRenderer.invoke("settings:list-apps"),
   restoreClipState: (state) => ipcRenderer.invoke("clips:restore", state),
   getHookStatus: () => ipcRenderer.invoke("hooks:status"),
   installHooks: (agentId) => ipcRenderer.invoke("hooks:install", agentId),
   uninstallHooks: (agentId) => ipcRenderer.invoke("hooks:uninstall", agentId),
   onClipConfig: (handler) => {
     ipcRenderer.on("clips:updated", (_event, data) => handler(data));
+  },
+  onForegroundApp: (handler) => {
+    ipcRenderer.on("settings:foreground-app", (_event, appName) => handler(appName));
   },
 });

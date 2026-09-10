@@ -92,6 +92,49 @@
         margin: 0;
         accent-color: #5ec8e3;
       }
+      .setting-row-top {
+        align-items: start;
+        margin-top: 12px;
+      }
+      .app-picker {
+        min-height: 48px;
+        max-height: 190px;
+        overflow: auto;
+        padding: 5px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.25);
+      }
+      .app-choice {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr);
+        gap: 7px;
+        align-items: start;
+        padding: 5px;
+        border-radius: 4px;
+      }
+      .app-choice:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .app-choice input {
+        margin: 2px 0 0;
+      }
+      .app-choice span,
+      .app-choice small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .app-choice small {
+        color: rgba(255, 255, 255, 0.42);
+      }
+      .app-picker-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 7px;
+      }
       main {
         display: flex;
         flex-direction: column;
@@ -273,6 +316,18 @@
           <input id="mouse-passthrough" class="setting-checkbox" type="checkbox" />
         </div>
         <p class="effect-help" data-i18n="mousePassthroughHelp">开启后，鼠标可穿过桌宠的透明区域操作下方窗口；关闭后，桌宠窗口会接收范围内的鼠标操作。</p>
+        <div class="setting-row setting-row-top">
+          <label for="excluded-apps" data-i18n="excludedApps">不显示的 App</label>
+          <div>
+            <div id="excluded-apps" class="app-picker"></div>
+            <div class="app-picker-toolbar">
+              <span class="effect-help" id="apps-status"></span>
+              <button type="button" id="refresh-apps" data-i18n="refreshApps">刷新列表</button>
+            </div>
+          </div>
+        </div>
+        <p class="effect-help" data-i18n="excludedAppsHelp">勾选当前已打开的 App。切换到这些 App 时只隐藏桌宠视频，任务面板仍会保留。</p>
+        <p class="effect-help"><span data-i18n="detectedApp">最近检测到的 App：</span><code id="detected-app">—</code></p>
         <p class="effect-help" data-i18n="videoToggleShortcut">视频显隐快捷键：Alt + V。</p>
       </section>
     </main>

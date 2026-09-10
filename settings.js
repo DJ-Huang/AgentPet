@@ -14,6 +14,14 @@
       windowScaleHelp: "可在 10%–200% 之间连续调节，也可按住 Ctrl/Command 滚动鼠标滚轮。",
       mousePassthrough: "允许鼠标穿透",
       mousePassthroughHelp: "开启后，鼠标可穿过桌宠的透明区域操作下方窗口；关闭后，桌宠窗口会接收范围内的鼠标操作。",
+      excludedApps: "不显示的 App",
+      excludedAppsHelp: "勾选当前已打开的 App。切换到这些 App 时只隐藏桌宠视频，任务面板仍会保留。",
+      refreshApps: "刷新列表",
+      noApps: "没有检测到可选 App",
+      appNotRunning: "当前未运行",
+      recentlyDetected: "最近检测到",
+      appListFailed: "读取 App 列表失败",
+      detectedApp: "最近检测到的 App：",
       videoToggleShortcut: "视频显隐快捷键：Alt + V。",
       agentsHelp: "会把桌宠通知 Hook 合并进各 Agent 的用户配置，不会整份覆盖已有 Hook。安装后如需信任，请在对应 Agent 里运行 /hooks。",
       installAllHooks: "一键配置全部",
@@ -70,6 +78,14 @@
       windowScaleHelp: "Adjust continuously from 10% to 200%, or hold Ctrl/Command while scrolling the mouse wheel.",
       mousePassthrough: "Allow Mouse Click-Through",
       mousePassthroughHelp: "When enabled, the pointer can pass through transparent pet areas to the window underneath. When disabled, the pet window receives pointer input within its bounds.",
+      excludedApps: "Hide in Apps",
+      excludedAppsHelp: "Select from currently open apps. Only the pet video hides while a selected app is active; the task panel remains available.",
+      refreshApps: "Refresh List",
+      noApps: "No selectable apps detected",
+      appNotRunning: "Not currently running",
+      recentlyDetected: "Recently detected",
+      appListFailed: "Failed to read the app list",
+      detectedApp: "Last detected app: ",
       videoToggleShortcut: "Show/hide video shortcut: Alt + V.",
       agentsHelp: "Merges the desktop-pet notify hook into each agent's user config without replacing existing hooks. If trust is required, run /hooks in that agent.",
       installAllHooks: "Configure All",
@@ -120,6 +136,10 @@
   const scaleInput = document.getElementById("window-scale");
   const scaleValue = document.getElementById("window-scale-value");
   const mousePassthroughInput = document.getElementById("mouse-passthrough");
+  const excludedAppsPicker = document.getElementById("excluded-apps");
+  const refreshAppsButton = document.getElementById("refresh-apps");
+  const appsStatus = document.getElementById("apps-status");
+  const detectedAppOutput = document.getElementById("detected-app");
   const edgeFadeInput = document.getElementById("edge-fade-percent");
   const edgeFadeValue = document.getElementById("edge-fade-percent-value");
   const overallInput = document.getElementById("overall-opacity");
@@ -133,6 +153,9 @@
   let scaleSaveTimer = 0;
   let hookStatus = { agents: [] };
   let hooksBusy = false;
+  let availableApps = [];
+  let appsLoading = false;
+  let appsError = "";
 
   function t(key) {
     return TEXT[language]?.[key] ?? TEXT["zh-CN"][key] ?? key;
@@ -253,6 +276,54 @@
     if (mousePassthroughInput) mousePassthroughInput.checked = config.mousePassthrough !== false;
   }
 
+  function renderExcludedApps() {
+    if (!excludedAppsPicker) return;
+    const selected = new Set(Array.isArray(config.excludedApps) ? config.excludedApps : []);
+    const rows = [...availableApps];
+    if (config.foregroundApp && !rows.some((row) => row.name.toLowerCase() === config.foregroundApp.toLowerCase())) {
+      rows.push({ name: config.foregroundApp, title: t("recentlyDetected") });
+    }
+    for (const name of selected) {
+      if (!rows.some((row) => row.name.toLowerCase() === name.toLowerCase())) rows.push({ name, title: t("appNotRunning") });
+    }
+    rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    excludedAppsPicker.replaceChildren(...rows.map((app) => {
+      const label = document.createElement("label");
+      label.className = "app-choice";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = app.name;
+      checkbox.checked = [...selected].some((name) => name.toLowerCase() === app.name.toLowerCase());
+      checkbox.disabled = config.foregroundAppDetectionSupported === false;
+      const detail = document.createElement("span");
+      const name = document.createElement("span");
+      name.textContent = app.name;
+      const title = document.createElement("small");
+      title.textContent = app.title || "";
+      detail.append(name, title);
+      label.append(checkbox, detail);
+      return label;
+    }));
+    if (appsStatus) appsStatus.textContent = appsError || (!rows.length && !appsLoading ? t("noApps") : "");
+    if (refreshAppsButton) refreshAppsButton.disabled = appsLoading || config.foregroundAppDetectionSupported === false;
+    if (detectedAppOutput) detectedAppOutput.textContent = config.foregroundApp || "—";
+  }
+
+  async function refreshApps() {
+    if (!window.petBridge?.listApps || appsLoading) return;
+    appsLoading = true;
+    appsError = "";
+    renderExcludedApps();
+    try {
+      availableApps = await window.petBridge.listApps();
+    } catch (error) {
+      appsError = error?.message || t("appListFailed");
+    } finally {
+      appsLoading = false;
+      renderExcludedApps();
+    }
+  }
+
   function render() {
     if (!root) return;
     root.replaceChildren(
@@ -352,6 +423,7 @@
     renderEffects();
     renderScale();
     renderMousePassthrough();
+    renderExcludedApps();
     renderAgents();
   }
 
@@ -481,6 +553,17 @@
     });
   }
 
+  if (excludedAppsPicker) {
+    excludedAppsPicker.addEventListener("change", () => {
+      if (!window.petBridge?.updateExcludedApps) return;
+      const selected = [...excludedAppsPicker.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+      window.petBridge.updateExcludedApps(selected).then(apply).catch((error) => {
+        window.alert(error?.message || "Failed to update excluded apps");
+      });
+    });
+  }
+  refreshAppsButton?.addEventListener("click", () => refreshApps());
+
   const restoreAll = document.getElementById("restore-all");
   if (restoreAll) {
     restoreAll.addEventListener("click", async () => {
@@ -547,7 +630,12 @@
       renderScale();
     });
     window.petBridge.onClipConfig((data) => apply(data));
+    window.petBridge.onForegroundApp?.((appName) => {
+      config = { ...config, foregroundApp: appName };
+      if (detectedAppOutput) detectedAppOutput.textContent = appName || "—";
+    });
     window.petBridge.getClipConfig().then(apply).catch(() => apply({ editor: {} }));
+    refreshApps();
     loadHooks().catch((error) => {
       setAgentsLog(error?.message || t("hookLoadFailed"));
     });

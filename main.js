@@ -13,6 +13,7 @@ const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, 
 const { getHookStatus, installHooks, uninstallHooks } = require("./lib/agent-hooks");
 const { setManualQuit } = require("./lib/launch-control");
 const { shouldShowPanelAbove } = require("./lib/panel-placement");
+const { createForegroundAppWatcher, isAppExcluded, listVisibleApps, normalizeExcludedApps } = require("./lib/foreground-app");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
@@ -43,6 +44,11 @@ let panelHeight = 0;
 let panelAbove = false;
 let videoVisible = true;
 let mousePassthrough = true;
+let excludedApps = [];
+let foregroundApp = null;
+let foregroundAppSuppressed = false;
+let manualWindowHidden = false;
+let foregroundAppWatcher = null;
 const maskJobs = new Map();
 
 const TEXT = {
@@ -130,7 +136,63 @@ function loadManifest() {
     scale,
     videoVisible,
     mousePassthrough,
+    excludedApps,
+    foregroundApp: foregroundApp?.name || "",
+    foregroundAppDetectionSupported: process.platform === "win32",
   };
+}
+
+function ownWindowProcessIds() {
+  const ids = new Set([process.pid]);
+  for (const window of BrowserWindow.getAllWindows()) {
+    const pid = window.webContents?.getOSProcessId?.();
+    if (Number.isFinite(pid)) ids.add(pid);
+  }
+  return ids;
+}
+
+function shouldPetWindowBeVisible() {
+  return !manualWindowHidden && (isVideoActuallyVisible() || panelHeight > 0);
+}
+
+function isVideoActuallyVisible() {
+  return videoVisible && !foregroundAppSuppressed;
+}
+
+function syncPetWindowVisibility() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (shouldPetWindowBeVisible()) mainWindow.showInactive();
+  else mainWindow.hide();
+  rebuildTray();
+}
+
+function updateForegroundApp(next) {
+  if (!next?.name || ownWindowProcessIds().has(next.pid)) return;
+  foregroundApp = next;
+  const suppressed = isAppExcluded(next.name, excludedApps);
+  if (suppressed !== foregroundAppSuppressed) {
+    setForegroundAppSuppressed(suppressed);
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send("settings:foreground-app", foregroundApp.name);
+  }
+}
+
+function setExcludedApps(next) {
+  excludedApps = normalizeExcludedApps(next);
+  setForegroundAppSuppressed(isAppExcluded(foregroundApp?.name, excludedApps));
+  saveSettings();
+  return loadManifest();
+}
+
+function setManualWindowHidden(next) {
+  manualWindowHidden = Boolean(next);
+  syncPetWindowVisibility();
+}
+
+function startForegroundAppWatcher() {
+  foregroundAppWatcher = createForegroundAppWatcher({ onChange: updateForegroundApp });
+  foregroundAppWatcher.start();
 }
 
 function pushClipConfig(payload) {
@@ -227,7 +289,7 @@ function videoSize() {
 }
 
 function windowSize() {
-  if (!videoVisible) return [280, Math.max(40, panelHeight)];
+  if (!isVideoActuallyVisible()) return [280, Math.max(40, panelHeight)];
   const [width, height] = videoSize();
   const extra = Math.max(0, panelHeight);
   return [Math.max(width, extra ? 280 : width), height + extra];
@@ -250,7 +312,7 @@ function applyWindowSize(previousPanelHeight = panelHeight) {
   if (bounds.width === width && bounds.height === height) return;
   setWindowBounds({
     x: bounds.x,
-    y: bounds.y + (videoVisible && panelAbove ? previousPanelHeight - panelHeight : 0),
+    y: bounds.y + (isVideoActuallyVisible() && panelAbove ? previousPanelHeight - panelHeight : 0),
     width,
     height,
   });
@@ -263,7 +325,7 @@ function sendPanelPlacement() {
 }
 
 function syncPanelPlacement() {
-  if (!mainWindow || mainWindow.isDestroyed() || !videoVisible || panelHeight <= 0) return;
+  if (!mainWindow || mainWindow.isDestroyed() || !isVideoActuallyVisible() || panelHeight <= 0) return;
   const bounds = mainWindow.getBounds();
   const [, petHeight] = videoSize();
   const petTop = bounds.y + (panelAbove ? panelHeight : 0);
@@ -284,28 +346,38 @@ function syncPanelPlacement() {
   sendPanelPlacement();
 }
 
-function setVideoVisible(next) {
-  const visible = Boolean(next);
-  if (visible === videoVisible) return;
+function applyVideoPresentation(previousVisible) {
+  const visible = isVideoActuallyVisible();
   if (!mainWindow || mainWindow.isDestroyed()) {
-    videoVisible = visible;
     return;
   }
 
   const bounds = mainWindow.getBounds();
   const [, videoHeight] = videoSize();
-  const panelTop = videoVisible ? bounds.y + (panelAbove ? 0 : videoHeight) : bounds.y;
-  videoVisible = visible;
+  const panelTop = previousVisible ? bounds.y + (panelAbove ? 0 : videoHeight) : bounds.y;
   const [width, height] = windowSize();
   setWindowBounds({
     x: Math.round(bounds.x + bounds.width / 2 - width / 2),
-    y: Math.round(videoVisible ? panelTop - (panelAbove ? 0 : videoHeight) : panelTop),
+    y: Math.round(visible ? panelTop - (panelAbove ? 0 : videoHeight) : panelTop),
     width,
     height,
   });
-  mainWindow.webContents.send("pet:video-visibility", { visible: videoVisible });
-  if (videoVisible || panelHeight > 0) mainWindow.show();
-  else mainWindow.hide();
+  mainWindow.webContents.send("pet:video-visibility", { visible });
+  syncPetWindowVisibility();
+}
+
+function setForegroundAppSuppressed(next) {
+  const previousVisible = isVideoActuallyVisible();
+  foregroundAppSuppressed = Boolean(next);
+  if (previousVisible !== isVideoActuallyVisible()) applyVideoPresentation(previousVisible);
+}
+
+function setVideoVisible(next) {
+  const visible = Boolean(next);
+  if (visible === videoVisible) return;
+  const previousVisible = isVideoActuallyVisible();
+  videoVisible = visible;
+  applyVideoPresentation(previousVisible);
   saveSettings();
   rebuildTray();
 }
@@ -329,6 +401,7 @@ function saveSettings() {
       language,
       videoVisible,
       mousePassthrough,
+      excludedApps,
       pinnedId: machine ? machine.pinnedId : existing.pinnedId || null,
     }),
   );
@@ -391,6 +464,7 @@ function createWindow() {
   if (Number.isFinite(saved.scale)) scale = clampScale(saved.scale);
   videoVisible = saved.videoVisible !== false;
   mousePassthrough = saved.mousePassthrough !== false;
+  excludedApps = normalizeExcludedApps(saved.excludedApps);
   const [width, height] = windowSize();
   const bounds = restorePosition(width, height);
 
@@ -437,7 +511,7 @@ function createWindow() {
     sendPanelPlacement();
   });
   mainWindow.once("ready-to-show", () => {
-    if (videoVisible || panelHeight > 0) mainWindow.show();
+    syncPetWindowVisibility();
   });
   mainWindow.on("moved", () => {
     syncPanelPlacement();
@@ -584,11 +658,10 @@ function rebuildTray() {
       ],
     },
     {
-      label: mainWindow?.isVisible() ? text("hide") : text("show"),
+      label: manualWindowHidden ? text("show") : text("hide"),
       click: () => {
         if (!mainWindow) return;
-        if (mainWindow.isVisible()) mainWindow.hide();
-        else mainWindow.show();
+        setManualWindowHidden(!manualWindowHidden);
       },
     },
     {
@@ -656,8 +729,7 @@ function createTray() {
   rebuildTray();
   tray.on("double-click", () => {
     if (!mainWindow) return;
-    if (mainWindow.isVisible()) mainWindow.hide();
-    else mainWindow.show();
+    setManualWindowHidden(!manualWindowHidden);
   });
 }
 
@@ -675,7 +747,8 @@ async function startServices() {
     port: PORT,
     machine,
     ensurePet: () => {
-      if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
+      manualWindowHidden = false;
+      syncPetWindowVisibility();
     },
   });
 
@@ -699,8 +772,9 @@ if (!gotLock) {
 } else {
   app.on("second-instance", () => {
     if (!mainWindow) return;
-    if (!mainWindow.isVisible()) mainWindow.show();
-    mainWindow.focus();
+    manualWindowHidden = false;
+    syncPetWindowVisibility();
+    if (mainWindow.isVisible()) mainWindow.focus();
   });
 
   app.whenReady().then(async () => {
@@ -712,6 +786,7 @@ if (!gotLock) {
     await startServices();
     createWindow();
     createTray();
+    startForegroundAppWatcher();
     if (!globalShortcut.register(VIDEO_TOGGLE_SHORTCUT, () => setVideoVisible(!videoVisible))) {
       console.warn(`[codex-video-pet] shortcut unavailable: ${VIDEO_TOGGLE_SHORTCUT}`);
     }
@@ -767,6 +842,12 @@ if (!gotLock) {
     if (!dragOffset) applyMousePassthrough();
     saveSettings();
     return loadManifest();
+  });
+
+  ipcMain.handle("settings:update-excluded-apps", (_event, next) => setExcludedApps(next));
+  ipcMain.handle("settings:list-apps", async () => {
+    const ownPids = ownWindowProcessIds();
+    return (await listVisibleApps()).filter((row) => !ownPids.has(row.pid));
   });
 
   ipcMain.handle("clips:restore", (_event, state) => {
@@ -825,9 +906,8 @@ if (!gotLock) {
     panelHeight = next;
     applyWindowSize(previous);
     syncPanelPlacement();
-    if (!videoVisible && mainWindow && !mainWindow.isDestroyed()) {
-      if (panelHeight > 0) mainWindow.show();
-      else mainWindow.hide();
+    if (!isVideoActuallyVisible() && mainWindow && !mainWindow.isDestroyed()) {
+      syncPetWindowVisibility();
     }
   });
 
@@ -890,6 +970,7 @@ if (!gotLock) {
     saveSettings();
     if (sessionCatalog) sessionCatalog.stop();
     if (jsonlWatcher) jsonlWatcher.stop();
+    if (foregroundAppWatcher) foregroundAppWatcher.stop();
     if (httpServer) httpServer.close();
   });
 

@@ -111,6 +111,8 @@ For a generic integration, send `agent: "codex"` in the payload so the current U
 
 Open **Desktop Pet Settings** from the tray menu to manage agent integrations, status videos, and visual effects. The following two sections cover the settings most people configure first.
 
+On Windows, **Hide in Apps** lists currently open applications for selection. Hana hides only her video while a selected app is in the foreground, keeps the task panel available, and restores the video when you switch away.
+
 ### Agent integrations
 
 ![Agent integration settings](docs/images/agent-settings.png)
