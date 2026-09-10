@@ -1,0 +1,63 @@
+{
+  "input_directory": "D:\\Project\\My\\DestokPet\\output\\101-1-generated-verify-input",
+  "video_count": 1,
+  "videos": [
+    {
+      "file": "101-1-generated-keyframes-video.mp4",
+      "frames": 25,
+      "fps": 30.0,
+      "width": 720,
+      "height": 480,
+      "duration_seconds": 0.833333,
+      "endpoint_mae": 26.143425,
+      "median_adjacent_mae": 3.454432,
+      "p95_adjacent_mae": 6.160745,
+      "seam_ratio": 7.568081,
+      "largest_adjacent_changes": [
+        {
+          "from_frame": 18,
+          "to_frame": 19,
+          "mae": 6.576089
+        },
+        {
+          "from_frame": 20,
+          "to_frame": 21,
+          "mae": 6.194232
+        },
+        {
+          "from_frame": 19,
+          "to_frame": 20,
+          "mae": 5.970984
+        },
+        {
+          "from_frame": 21,
+          "to_frame": 22,
+          "mae": 5.907997
+        },
+        {
+          "from_frame": 22,
+          "to_frame": 23,
+          "mae": 5.451602
+        }
+      ],
+      "best_tail_head_candidate": {
+        "appearance_distance": 0.112117,
+        "tail_frame": 15,
+        "head_frame": 9
+      },
+      "edge_sheet": "contact-sheets\\101-1-generated-keyframes-video-edges.jpg",
+      "timeline_sheet": "contact-sheets\\101-1-generated-keyframes-video-timeline.jpg"
+    }
+  ],
+  "pairwise_last_to_first_mae": {
+    "101-1-generated-keyframes-video.mp4": {
+      "101-1-generated-keyframes-video.mp4": 26.143425
+    }
+  },
+  "worst_pair": {
+    "mae": 26.143425,
+    "from": "101-1-generated-keyframes-video.mp4",
+    "to": "101-1-generated-keyframes-video.mp4"
+  },
+  "interpretation": "Metrics locate suspicious frames. Inspect the generated sheets and normal-speed playback before deciding whether a clip has a real return path."
+}

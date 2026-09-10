@@ -1,0 +1,63 @@
+{
+  "input_directory": "D:\\Project\\My\\DestokPet\\output\\101-1-verify-input",
+  "video_count": 1,
+  "videos": [
+    {
+      "file": "101-1-smooth-interpolated.mp4",
+      "frames": 28,
+      "fps": 30.0,
+      "width": 720,
+      "height": 480,
+      "duration_seconds": 0.933333,
+      "endpoint_mae": 27.8255,
+      "median_adjacent_mae": 0.401893,
+      "p95_adjacent_mae": 7.544351,
+      "seam_ratio": 69.236037,
+      "largest_adjacent_changes": [
+        {
+          "from_frame": 12,
+          "to_frame": 13,
+          "mae": 7.719766
+        },
+        {
+          "from_frame": 13,
+          "to_frame": 14,
+          "mae": 7.556995
+        },
+        {
+          "from_frame": 14,
+          "to_frame": 15,
+          "mae": 7.514846
+        },
+        {
+          "from_frame": 15,
+          "to_frame": 16,
+          "mae": 7.305538
+        },
+        {
+          "from_frame": 9,
+          "to_frame": 10,
+          "mae": 4.438598
+        }
+      ],
+      "best_tail_head_candidate": {
+        "appearance_distance": 0.347241,
+        "tail_frame": 15,
+        "head_frame": 9
+      },
+      "edge_sheet": "contact-sheets\\101-1-smooth-interpolated-edges.jpg",
+      "timeline_sheet": "contact-sheets\\101-1-smooth-interpolated-timeline.jpg"
+    }
+  ],
+  "pairwise_last_to_first_mae": {
+    "101-1-smooth-interpolated.mp4": {
+      "101-1-smooth-interpolated.mp4": 27.8255
+    }
+  },
+  "worst_pair": {
+    "mae": 27.8255,
+    "from": "101-1-smooth-interpolated.mp4",
+    "to": "101-1-smooth-interpolated.mp4"
+  },
+  "interpretation": "Metrics locate suspicious frames. Inspect the generated sheets and normal-speed playback before deciding whether a clip has a real return path."
+}
