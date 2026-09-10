@@ -3,9 +3,11 @@ import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import launchControl from "../lib/launch-control.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+const { isManualQuit } = launchControl;
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 const KNOWN_AGENTS = new Set(["codex", "codely-cli", "cursor", "claude-code"]);
@@ -220,10 +222,12 @@ try {
   };
 
   if (event === "SessionStart") {
-    try {
-      await post("/ensure", body);
-    } catch {
-      spawnPet();
+    if (!isManualQuit()) {
+      try {
+        await post("/ensure", body);
+      } catch {
+        spawnPet();
+      }
     }
   } else {
     try {

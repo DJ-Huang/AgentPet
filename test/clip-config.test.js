@@ -17,7 +17,8 @@ test("bundled Hana manifest resolves videos relative to its own directory", () =
   assert.deepEqual(config.missing, { idle: [], working: [], completed: [] });
   assert.equal(config.files.idle.length, 8);
   assert.equal(config.files.working.length, 3);
-  assert.equal(config.files.completed.length, 1);
+  assert.deepEqual(config.files.completed, config.files.idle);
+  assert.equal(config.clips.completed.pick, "random");
 });
 
 test("empty legacy review config does not suppress the completed default", (t) => {

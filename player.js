@@ -39,6 +39,7 @@
   let ignoreMouse = true;
   let sampleRaf = 0;
   let dragging = false;
+  const root = document.getElementById("root");
   const stage = document.getElementById("stage");
   const sessionList = document.getElementById("session-list");
   const sessionsPanel = document.getElementById("sessions");
@@ -525,6 +526,9 @@
     window.petBridge.onLanguage((nextLanguage) => {
       applyLanguage(nextLanguage);
       renderSessions(currentThreads);
+    });
+    window.petBridge.onPanelPlacement((placement) => {
+      if (root) root.classList.toggle("panel-above", Boolean(placement?.above));
     });
   }
 })();

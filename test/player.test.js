@@ -92,6 +92,7 @@ class FakeElement {
 
 function createPlayer({ pick, random = () => 0 }) {
   const elements = {
+    root: new FakeElement(),
     "video-a": new FakeElement(),
     "video-b": new FakeElement(),
     stage: new FakeElement(),
@@ -100,11 +101,13 @@ function createPlayer({ pick, random = () => 0 }) {
     "activity-title": new FakeElement(),
   };
   let init;
+  let panelPlacement;
   const petBridge = {
     onInit(handler) { init = handler; },
     onState() {},
     onEffects() {},
     onLanguage() {},
+    onPanelPlacement(handler) { panelPlacement = handler; },
     setPanelHeight() {},
   };
   const document = {
@@ -134,7 +137,7 @@ function createPlayer({ pick, random = () => 0 }) {
     clips: { idle: { loop: true, pick } },
     files: { idle: ["file:///one.mp4", "file:///two.mp4", "file:///three.mp4"] },
   });
-  return { videoA: elements["video-a"], videoB: elements["video-b"] };
+  return { videoA: elements["video-a"], videoB: elements["video-b"], root: elements.root, panelPlacement };
 }
 
 async function settlePlayback(video) {
@@ -163,4 +166,12 @@ test("random playback chooses another clip when the current clip ends", async ()
   videoB.onended();
   assert.equal(videoA.src, "file:///two.mp4");
   assert.equal(videoB.loop, false);
+});
+
+test("activity panel can be placed above the pet", () => {
+  const { root, panelPlacement } = createPlayer({ pick: "random" });
+  panelPlacement({ above: true });
+  assert.equal(root.classList.contains("panel-above"), true);
+  panelPlacement({ above: false });
+  assert.equal(root.classList.contains("panel-above"), false);
 });

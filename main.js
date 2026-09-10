@@ -11,6 +11,8 @@ const { createJsonlWatcher } = require("./lib/jsonl-watcher");
 const { createSessionCatalog, TITLE_LIMIT } = require("./lib/session-catalog");
 const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, updateMaskEffects, restoreClipState } = require("./lib/clip-config");
 const { getHookStatus, installHooks, uninstallHooks } = require("./lib/agent-hooks");
+const { setManualQuit } = require("./lib/launch-control");
+const { shouldShowPanelAbove } = require("./lib/panel-placement");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
@@ -37,6 +39,7 @@ let language = "zh-CN";
 let dragOffset = null;
 let dragTimer = null;
 let panelHeight = 0;
+let panelAbove = false;
 const maskJobs = new Map();
 
 const TEXT = {
@@ -220,17 +223,55 @@ function windowSize() {
   return [Math.max(width, extra ? 280 : width), height + extra];
 }
 
-function applyWindowSize() {
+function setWindowBounds(nextBounds) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const current = mainWindow.getBounds();
+  if (dragOffset) {
+    dragOffset.x += current.x - nextBounds.x;
+    dragOffset.y += current.y - nextBounds.y;
+  }
+  mainWindow.setBounds(nextBounds);
+}
+
+function applyWindowSize(previousPanelHeight = panelHeight) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const [width, height] = windowSize();
   const bounds = mainWindow.getBounds();
   if (bounds.width === width && bounds.height === height) return;
-  mainWindow.setBounds({
+  setWindowBounds({
     x: bounds.x,
-    y: bounds.y,
+    y: bounds.y + (panelAbove ? previousPanelHeight - panelHeight : 0),
     width,
     height,
   });
+}
+
+function sendPanelPlacement() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("pet:panel-placement", { above: panelAbove });
+  }
+}
+
+function syncPanelPlacement() {
+  if (!mainWindow || mainWindow.isDestroyed() || panelHeight <= 0) return;
+  const bounds = mainWindow.getBounds();
+  const [, petHeight] = videoSize();
+  const petTop = bounds.y + (panelAbove ? panelHeight : 0);
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(petTop + petHeight / 2),
+  });
+  const above = shouldShowPanelAbove({ workArea: display.workArea, petTop, petHeight });
+  if (above === panelAbove) return;
+
+  panelAbove = above;
+  setWindowBounds({
+    x: bounds.x,
+    y: petTop - (panelAbove ? panelHeight : 0),
+    width: bounds.width,
+    height: bounds.height,
+  });
+  sendPanelPlacement();
 }
 
 function saveSettings() {
@@ -347,9 +388,13 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("pet:init", { ...loadManifest(), ...machine.snapshot() });
+    sendPanelPlacement();
   });
   mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.on("moved", saveSettings);
+  mainWindow.on("moved", () => {
+    syncPanelPlacement();
+    saveSettings();
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -611,6 +656,8 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    // A user opening the app explicitly opts back into hook-based auto-start.
+    setManualQuit(false);
     if (process.platform === "win32") app.setAppUserModelId("codex-video-pet");
     if (process.platform === "darwin" && app.dock) app.dock.setIcon(APP_ICON);
     language = normalizeLanguage(loadSettings().language);
@@ -704,8 +751,10 @@ if (!gotLock) {
   ipcMain.on("pet:panel-height", (_event, height) => {
     const next = Math.max(0, Math.round(Number(height) || 0));
     if (next === panelHeight) return;
+    const previous = panelHeight;
     panelHeight = next;
-    applyWindowSize();
+    applyWindowSize(previous);
+    syncPanelPlacement();
   });
 
   ipcMain.on("pet:pin-thread", (_event, id) => {
@@ -760,6 +809,7 @@ if (!gotLock) {
   });
 
   app.on("before-quit", () => {
+    setManualQuit(true);
     if (dragTimer) clearInterval(dragTimer);
     saveSettings();
     if (sessionCatalog) sessionCatalog.stop();

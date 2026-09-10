@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld("petBridge", {
   onLanguage: (handler) => {
     ipcRenderer.on("pet:language", (_event, language) => handler(language));
   },
+  onPanelPlacement: (handler) => {
+    ipcRenderer.on("pet:panel-placement", (_event, placement) => handler(placement));
+  },
   onScale: (handler) => {
     ipcRenderer.on("pet:scale", (_event, scale) => handler(scale));
   },

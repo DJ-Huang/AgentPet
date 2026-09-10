@@ -25,8 +25,18 @@
       "pick": "random"
     },
     "completed": {
-      "file": "Videos/Work/03.mp4",
-      "loop": true
+      "files": [
+        "Videos/Idle/thinking.mp4",
+        "Videos/Idle/working.mp4",
+        "Videos/Idle/relaxing.mp4",
+        "Videos/Idle/playfull.mp4",
+        "Videos/Idle/tease-loop.mp4",
+        "Videos/Idle/sofa-turn-loop.mp4",
+        "Videos/Idle/come close.mp4",
+        "Videos/Idle/body-stretch.mp4"
+      ],
+      "loop": true,
+      "pick": "random"
     }
   }
 }
