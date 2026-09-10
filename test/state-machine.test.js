@@ -40,6 +40,10 @@ test("permission and ask-user tools map to waiting", () => {
     "waiting",
   );
   assert.equal(
+    stateFromJsonl({ payload: { type: "function_call", name: "request_user_input" } }),
+    "waiting",
+  );
+  assert.equal(
     stateFromJsonl({ payload: { type: "item_started", item: { type: "McpToolCall", tool: "ask_user" } } }),
     "waiting",
   );

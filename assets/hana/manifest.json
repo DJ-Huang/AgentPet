@@ -26,21 +26,16 @@
     },
     "waiting": {
       "files": [
-        "Videos/Idle/thinking.mp4"
+        "Videos/Waitting/01.mp4"
       ],
       "loop": true,
       "pick": "random"
     },
     "completed": {
       "files": [
-        "Videos/Idle/thinking.mp4",
-        "Videos/Idle/working.mp4",
-        "Videos/Idle/relaxing.mp4",
-        "Videos/Idle/playfull.mp4",
-        "Videos/Idle/tease-loop.mp4",
-        "Videos/Idle/sofa-turn-loop.mp4",
-        "Videos/Idle/come close.mp4",
-        "Videos/Idle/body-stretch.mp4"
+        "Videos/Done/01.mp4",
+        "Videos/Done/02.mp4",
+        "Videos/Done/03.mp4"
       ],
       "loop": true,
       "pick": "random"

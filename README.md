@@ -6,6 +6,17 @@
 
 ![Hana showcase](docs/images/01.gif)
 
+### Status preview
+
+Hana uses four visual states to reflect the current agent activity:
+
+| State | Preview | Meaning |
+| --- | --- | --- |
+| `waiting` | ![Hana waiting](docs/images/status-waiting.png) | The agent needs user input or confirmation. |
+| `working` | ![Hana working](docs/images/status-working.png) | The agent is processing a prompt, thinking, or using a tool. |
+| `done` | ![Hana done](docs/images/status-done.png) | A task has completed and remains visible until acknowledged. |
+| `idle` | ![Hana idle](docs/images/status-idle.png) | No active or unread-completed task is present. |
+
 ---
 
 ## What Hana does

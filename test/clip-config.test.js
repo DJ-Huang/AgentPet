@@ -18,7 +18,9 @@ test("bundled Hana manifest resolves videos relative to its own directory", () =
   assert.equal(config.files.idle.length, 8);
   assert.equal(config.files.working.length, 3);
   assert.equal(config.files.waiting.length, 1);
-  assert.deepEqual(config.files.completed, config.files.idle);
+  assert.equal(config.files.completed.length, 3);
+  assert.match(config.files.waiting[0], /Videos\/Waitting\/01\.mp4$/);
+  assert.ok(config.files.completed.every((file) => file.includes("/Videos/Done/")));
   assert.equal(config.clips.completed.pick, "random");
 });
 
