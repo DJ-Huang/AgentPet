@@ -109,6 +109,8 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
   const dragStarts = [];
   const openedThreads = [];
   const dismissedThreads = [];
+  const ignoreMouseCalls = [];
+  const windowListeners = new Map();
   const petBridge = {
     onInit(handler) { init = handler; },
     onState() {},
@@ -120,7 +122,7 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
     openThread(id) { openedThreads.push(id); },
     dismissThread(id) { dismissedThreads.push(id); },
     dragStart(point) { dragStarts.push(point); },
-    setIgnoreMouse() {},
+    setIgnoreMouse(ignore) { ignoreMouseCalls.push(ignore); },
     setPanelHeight() {},
   };
   const document = {
@@ -135,7 +137,16 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
   };
   const context = {
     document,
-    window: { petBridge, addEventListener() {}, clearTimeout() {}, setTimeout },
+    window: {
+      petBridge,
+      addEventListener(type, handler) {
+        const handlers = windowListeners.get(type) || [];
+        handlers.push(handler);
+        windowListeners.set(type, handlers);
+      },
+      clearTimeout() {},
+      setTimeout,
+    },
     Image: class {},
     Math: Object.assign(Object.create(Math), { random }),
     requestAnimationFrame(handler) { handler(); return 1; },
@@ -162,6 +173,10 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
     sessionRows: elements["session-list"].children,
     openedThreads,
     dismissedThreads,
+    ignoreMouseCalls,
+    dispatchWindow(type, event) {
+      for (const handler of windowListeners.get(type) || []) handler(event);
+    },
   };
 }
 
@@ -209,6 +224,14 @@ test("video visibility can switch the pet into list-only mode", () => {
   assert.equal(root.classList.contains("video-hidden"), false);
 });
 
+test("activity panel remains visible with an empty-state row when there are no sessions", () => {
+  const { sessions, sessionRows } = createPlayer({ pick: "random", threads: [] });
+  assert.equal(sessions.classList.contains("visible"), true);
+  assert.equal(sessionRows.length, 1);
+  assert.equal(sessionRows[0].className, "session-empty");
+  assert.equal(sessionRows[0].textContent, "暂无活动");
+});
+
 test("blank activity-panel space opens the video visibility menu", () => {
   const { sessions, videoMenuCalls } = createPlayer({ pick: "random" });
   let prevented = false;
@@ -233,6 +256,22 @@ test("blank activity-panel space can drag the list-only window", () => {
   assert.equal(dragStarts.length, 1);
   assert.equal(dragStarts[0].x, 321);
   assert.equal(dragStarts[0].y, 654);
+});
+
+test("activity panel disables click-through by coordinates even without a panel event target", () => {
+  const { sessions, dispatchWindow, ignoreMouseCalls } = createPlayer({
+    pick: "random",
+    threads: [{ id: "codex-one", agent: "codex", state: "working", title: "Codex" }],
+  });
+  sessions.getBoundingClientRect = () => ({ left: 0, top: 100, right: 280, bottom: 150, width: 280, height: 50 });
+
+  dispatchWindow("mousemove", {
+    clientX: 120,
+    clientY: 125,
+    target: { closest() { return null; } },
+  });
+
+  assert.deepEqual(ignoreMouseCalls, [false]);
 });
 
 test("Cursor activity is not clickable while Codex activity still opens", () => {

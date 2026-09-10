@@ -17,12 +17,14 @@
   const TEXT = {
     "zh-CN": {
       activity: "活动",
+      noActivity: "暂无活动",
       untitled: "未命名任务",
       agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "手动" },
       states: { idle: "空闲", waiting: "等待确认", working: "工作中", completed: "完成" },
     },
     en: {
       activity: "Activity",
+      noActivity: "No activity",
       untitled: "Untitled Task",
       agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "Manual" },
       states: { idle: "Idle", waiting: "Needs Input", working: "Working", completed: "Done" },
@@ -384,9 +386,12 @@
     if (!sessionList) return;
     const rows = Array.isArray(threads) ? threads : [];
     currentThreads = rows;
-    if (sessionsPanel) sessionsPanel.classList.toggle("visible", rows.length > 0);
+    if (sessionsPanel) sessionsPanel.classList.add("visible");
     if (rows.length === 0) {
-      sessionList.replaceChildren();
+      const empty = document.createElement("div");
+      empty.className = "session-empty";
+      empty.textContent = uiText("noActivity");
+      sessionList.replaceChildren(empty);
       requestAnimationFrame(() => requestAnimationFrame(syncPanelHeight));
       return;
     }
@@ -504,7 +509,9 @@
 
   function overPanel(event) {
     if (!sessionsPanel || !sessionsPanel.classList.contains("visible")) return false;
-    return Boolean(event.target.closest && event.target.closest("#sessions"));
+    const rect = sessionsPanel.getBoundingClientRect();
+    return event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
   }
 
   function setIgnore(next) {

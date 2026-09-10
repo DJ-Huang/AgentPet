@@ -12,7 +12,7 @@ const { createSessionCatalog, TITLE_LIMIT } = require("./lib/session-catalog");
 const { loadClipConfig, addClipFiles, clipFileAt, updateClipState, setClipMask, updateMaskEffects, restoreClipState } = require("./lib/clip-config");
 const { getHookStatus, installHooks, uninstallHooks } = require("./lib/agent-hooks");
 const { setManualQuit } = require("./lib/launch-control");
-const { shouldShowPanelAbove } = require("./lib/panel-placement");
+const { isPointOverActivityPanel, shouldShowPanelAbove } = require("./lib/panel-placement");
 const { createForegroundAppWatcher, isAppExcluded, listVisibleApps, normalizeExcludedApps } = require("./lib/foreground-app");
 
 const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
@@ -44,6 +44,9 @@ let panelHeight = 0;
 let panelAbove = false;
 let videoVisible = true;
 let mousePassthrough = true;
+let rendererWantsMousePassthrough = true;
+let mouseEventsIgnored = null;
+let mousePassthroughTimer = null;
 let excludedApps = [];
 let foregroundApp = null;
 let foregroundAppSuppressed = false;
@@ -384,7 +387,17 @@ function setVideoVisible(next) {
 
 function applyMousePassthrough() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mousePassthrough) mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  const overPanel = mainWindow.isVisible() && isPointOverActivityPanel({
+    bounds: mainWindow.getBounds(),
+    panelHeight,
+    panelAbove,
+    videoVisible: isVideoActuallyVisible(),
+    point: screen.getCursorScreenPoint(),
+  });
+  const ignore = mousePassthrough && rendererWantsMousePassthrough && !dragOffset && !overPanel;
+  if (ignore === mouseEventsIgnored) return;
+  mouseEventsIgnored = ignore;
+  if (ignore) mainWindow.setIgnoreMouseEvents(true, { forward: true });
   else mainWindow.setIgnoreMouseEvents(false);
 }
 
@@ -497,6 +510,7 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   applyMousePassthrough();
+  mousePassthroughTimer = setInterval(applyMousePassthrough, 50);
   if (process.platform !== "darwin") mainWindow.setIcon(APP_ICON);
   if (process.platform === "win32") {
     mainWindow.setAppDetails({
@@ -923,9 +937,9 @@ if (!gotLock) {
 
   ipcMain.on("pet:ignore-mouse", (_event, ignore) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (!mousePassthrough || dragOffset) return;
-    if (ignore) mainWindow.setIgnoreMouseEvents(true, { forward: true });
-    else mainWindow.setIgnoreMouseEvents(false);
+    rendererWantsMousePassthrough = Boolean(ignore);
+    if (dragOffset) return;
+    applyMousePassthrough();
   });
 
   ipcMain.on("pet:scale-by", (_event, delta) => {
@@ -941,6 +955,7 @@ if (!gotLock) {
       y: point.y - bounds.y,
     };
     mainWindow.setIgnoreMouseEvents(false);
+    mouseEventsIgnored = false;
     if (dragTimer) clearInterval(dragTimer);
     dragTimer = setInterval(() => {
       if (!dragOffset || !mainWindow || mainWindow.isDestroyed()) return;
@@ -967,6 +982,7 @@ if (!gotLock) {
   app.on("before-quit", () => {
     setManualQuit(true);
     if (dragTimer) clearInterval(dragTimer);
+    if (mousePassthroughTimer) clearInterval(mousePassthroughTimer);
     saveSettings();
     if (sessionCatalog) sessionCatalog.stop();
     if (jsonlWatcher) jsonlWatcher.stop();
