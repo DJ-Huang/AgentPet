@@ -2,7 +2,7 @@
   "name": "codex-video-pet",
   "version": "0.1.0",
   "private": true,
-  "description": "Windows transparent video desktop pet driven by Codex hooks",
+  "description": "Windows and macOS transparent video desktop pet driven by AI agent hooks",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

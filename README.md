@@ -20,10 +20,16 @@ Hana is more than a status indicator. Her panel lists up to eight recent agent s
 
 ## Quick start
 
-**Requirements:** Windows, Node.js, and an AI coding agent with hooks or command callbacks.
+**Requirements:** Windows or macOS, Node.js, and an AI coding agent with hooks or command callbacks.
+
+For the easiest start, use the launcher for your platform from the project root:
+
+- **Windows:** double-click `start-hana-windows.cmd`
+- **macOS:** run `chmod +x start-hana-macos.command` once, then double-click `start-hana-macos.command`
+
+Or start Hana manually:
 
 ```powershell
-cd D:\Project\My\DestokPet
 npm install
 npm run make-placeholders
 npm start

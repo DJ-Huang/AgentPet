@@ -16,7 +16,7 @@ const HOST = process.env.CODEX_VIDEO_PET_HOST || "127.0.0.1";
 const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 // Default clips live with Hana's bundled videos. Manifest entries resolve relative to this folder.
 const PET_DIR = path.join(__dirname, "assets", "hana");
-const APP_ICON = path.join(PET_DIR, "app-icon.ico");
+const APP_ICON = path.join(PET_DIR, process.platform === "win32" ? "app-icon.ico" : "app-icon.png");
 const SETTINGS_FILE = path.join(app.getPath("userData"), "window-position.json");
 const CLIP_CONFIG_FILE = path.join(app.getPath("userData"), "clip-config.json");
 const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
@@ -336,11 +336,13 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
-  mainWindow.setIcon(APP_ICON);
-  mainWindow.setAppDetails({
-    appId: "codex-video-pet",
-    appIconPath: APP_ICON,
-  });
+  if (process.platform !== "darwin") mainWindow.setIcon(APP_ICON);
+  if (process.platform === "win32") {
+    mainWindow.setAppDetails({
+      appId: "codex-video-pet",
+      appIconPath: APP_ICON,
+    });
+  }
   mainWindow.loadFile(path.join(__dirname, "pet.html"));
 
   mainWindow.webContents.on("did-finish-load", () => {
@@ -356,7 +358,7 @@ function createWindow() {
 function trayImage() {
   if (fs.existsSync(APP_ICON)) {
     const icon = nativeImage.createFromPath(APP_ICON);
-    if (!icon.isEmpty()) return icon;
+    if (!icon.isEmpty()) return process.platform === "darwin" ? icon.resize({ width: 18, height: 18 }) : icon;
   }
   return nativeImage.createFromDataURL(
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPUlEQVQ4T2NkYGD4z0ABYBw1gGE0DBhGQ58BCgoK/5EFGRgY/qMrRhZjYGD4j66YEbeJ2BRjuAHbZqJ7gXQwDAAA0r4H/6F9yH8AAAAASUVORK5CYII=",
@@ -539,11 +541,13 @@ function createSettingsWindow() {
       nodeIntegration: false,
     },
   });
-  settingsWindow.setIcon(APP_ICON);
-  settingsWindow.setAppDetails({
-    appId: "codex-video-pet",
-    appIconPath: APP_ICON,
-  });
+  if (process.platform !== "darwin") settingsWindow.setIcon(APP_ICON);
+  if (process.platform === "win32") {
+    settingsWindow.setAppDetails({
+      appId: "codex-video-pet",
+      appIconPath: APP_ICON,
+    });
+  }
   settingsWindow.setMenuBarVisibility(false);
   settingsWindow.loadFile(path.join(__dirname, "settings.html"));
   settingsWindow.webContents.on("did-finish-load", () => {
@@ -607,7 +611,8 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    app.setAppUserModelId("codex-video-pet");
+    if (process.platform === "win32") app.setAppUserModelId("codex-video-pet");
+    if (process.platform === "darwin" && app.dock) app.dock.setIcon(APP_ICON);
     language = normalizeLanguage(loadSettings().language);
     await startServices();
     createWindow();
