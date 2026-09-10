@@ -20,6 +20,7 @@ const PORT = Number(process.env.CODEX_VIDEO_PET_PORT || 17331);
 // Default clips live with Hana's bundled videos. Manifest entries resolve relative to this folder.
 const PET_DIR = path.join(__dirname, "assets", "hana");
 const APP_ICON = path.join(PET_DIR, process.platform === "win32" ? "app-icon.ico" : "app-icon.png");
+const TRAY_TEMPLATE_ICON = path.join(__dirname, "assets", "trayTemplate.png");
 const SETTINGS_FILE = path.join(app.getPath("userData"), "window-position.json");
 const CLIP_CONFIG_FILE = path.join(app.getPath("userData"), "clip-config.json");
 const READ_FILE = path.join(app.getPath("userData"), "read-receipts.json");
@@ -537,12 +538,41 @@ function createWindow() {
 }
 
 function trayImage() {
+  if (process.platform === "darwin") {
+    // Menu-bar icons must be template images (black + alpha). A color portrait
+    // becomes an unreadable blob and is often crowded out by the notch.
+    if (fs.existsSync(TRAY_TEMPLATE_ICON)) {
+      const icon = nativeImage.createFromPath(TRAY_TEMPLATE_ICON);
+      if (!icon.isEmpty()) {
+        icon.setTemplateImage(true);
+        return icon.resize({ width: 18, height: 18 });
+      }
+    }
+  }
   if (fs.existsSync(APP_ICON)) {
     const icon = nativeImage.createFromPath(APP_ICON);
-    if (!icon.isEmpty()) return process.platform === "darwin" ? icon.resize({ width: 18, height: 18 }) : icon;
+    if (!icon.isEmpty()) return icon;
   }
   return nativeImage.createFromDataURL(
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPUlEQVQ4T2NkYGD4z0ABYBw1gGE0DBhGQ58BCgoK/5EFGRgY/qMrRhZjYGD4j66YEbeJ2BRjuAHbZqJ7gXQwDAAA0r4H/6F9yH8AAAAASUVORK5CYII=",
+  );
+}
+
+function rebuildDockMenu() {
+  if (process.platform !== "darwin" || !app.dock) return;
+  app.dock.setMenu(
+    Menu.buildFromTemplate([
+      { label: text("settings"), click: () => createSettingsWindow() },
+      {
+        label: manualWindowHidden ? text("show") : text("hide"),
+        click: () => {
+          if (!mainWindow) return;
+          setManualWindowHidden(!manualWindowHidden);
+        },
+      },
+      { type: "separator" },
+      { label: text("quit"), click: () => app.quit() },
+    ]),
   );
 }
 
@@ -698,6 +728,7 @@ function rebuildTray() {
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
   tray.setToolTip(`Codex Video Pet · ${stateText(current)}${snap.threads.find((row) => row.driving)?.title ? ` · ${snap.threads.find((row) => row.driving).title}` : ""}`);
+  rebuildDockMenu();
 }
 
 function createSettingsWindow() {
@@ -740,9 +771,10 @@ function createSettingsWindow() {
 
 function createTray() {
   tray = new Tray(trayImage());
-  // macOS menu-bar icons from a dark portrait are easy to miss; show a label.
+  // Title keeps the status item discoverable when the menu bar is crowded.
   if (process.platform === "darwin") tray.setTitle("Hana");
   rebuildTray();
+  rebuildDockMenu();
   tray.on("double-click", () => {
     if (!mainWindow) return;
     setManualWindowHidden(!manualWindowHidden);
@@ -802,6 +834,7 @@ if (!gotLock) {
     await startServices();
     createWindow();
     createTray();
+    rebuildDockMenu();
     startForegroundAppWatcher();
     if (!globalShortcut.register(VIDEO_TOGGLE_SHORTCUT, () => setVideoVisible(!videoVisible))) {
       console.warn(`[codex-video-pet] shortcut unavailable: ${VIDEO_TOGGLE_SHORTCUT}`);

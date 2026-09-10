@@ -56,7 +56,7 @@ The pet appears as a transparent window near the bottom-right of your desktop. I
 - **Resize Hana:** point at the character, hold `Ctrl`, and scroll the mouse wheel.
 - **Focus a session:** click a session below the video to pin it; click again to unpin and resume automatic following.
 - **Open the source task:** click a Codex session to open it in Codex, or a Cursor session to return to its workspace.
-- **Use the tray menu:** click the Hana tray icon (on macOS it shows the label **Hana** in the menu bar) to view sessions, change settings, reload videos, hide/show the pet, or quit. You can also right-click the pet and choose **Settings…**.
+- **Use the tray / Dock menu:** on macOS look for the **Hana** label in the menu bar; if the bar is full (common on notched MacBooks) the icon may be hidden — right-click the **Electron** Dock icon and choose **Settings…**, or right-click the pet itself. On Windows, use the Hana tray icon.
 
 ### Understanding states
 
