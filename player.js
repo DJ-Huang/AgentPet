@@ -1,5 +1,5 @@
 (() => {
-  const FALLBACK = ["working:idle", "completed:idle"];
+  const FALLBACK = ["waiting:working", "working:idle", "completed:idle"];
   const FALLBACK_MAP = Object.fromEntries(FALLBACK.map((pair) => pair.split(":")));
 
   const videoA = document.getElementById("video-a");
@@ -16,13 +16,13 @@
       activity: "活动",
       untitled: "未命名任务",
       agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "手动" },
-      states: { idle: "空闲", working: "工作中", completed: "完成" },
+      states: { idle: "空闲", waiting: "等待确认", working: "工作中", completed: "完成" },
     },
     en: {
       activity: "Activity",
       untitled: "Untitled Task",
       agents: { codex: "Codex", cursor: "Cursor", "codely-cli": "Codely", "claude-code": "Claude", manual: "Manual" },
-      states: { idle: "Idle", working: "Working", completed: "Done" },
+      states: { idle: "Idle", waiting: "Needs Input", working: "Working", completed: "Done" },
     },
   };
 
@@ -400,6 +400,7 @@
         const dot = document.createElement("span");
         dot.className = "session-dot";
         if (thread.state === "completed") dot.classList.add("completed");
+        else if (thread.state === "waiting") dot.classList.add("waiting");
         else if (thread.state !== "idle") dot.classList.add("running");
 
         const agent = document.createElement("span");

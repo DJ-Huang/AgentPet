@@ -14,9 +14,10 @@ test("bundled Hana manifest resolves videos relative to its own directory", () =
     userConfigPath: path.join(os.tmpdir(), `destokpet-no-user-config-${Date.now()}.json`),
   });
 
-  assert.deepEqual(config.missing, { idle: [], working: [], completed: [] });
+  assert.deepEqual(config.missing, { idle: [], waiting: [], working: [], completed: [] });
   assert.equal(config.files.idle.length, 8);
   assert.equal(config.files.working.length, 3);
+  assert.equal(config.files.waiting.length, 1);
   assert.deepEqual(config.files.completed, config.files.idle);
   assert.equal(config.clips.completed.pick, "random");
 });

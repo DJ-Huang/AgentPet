@@ -24,6 +24,13 @@
       "loop": true,
       "pick": "random"
     },
+    "waiting": {
+      "files": [
+        "Videos/Idle/thinking.mp4"
+      ],
+      "loop": true,
+      "pick": "random"
+    },
     "completed": {
       "files": [
         "Videos/Idle/thinking.mp4",

@@ -17,6 +17,7 @@
       "pick": "random"
     },
     "working": { "file": "../hana/Videos/Work/01.mp4", "loop": true },
+    "waiting": { "file": "waiting.webm", "loop": true },
     "completed": { "file": "review.webm", "loop": true }
   }
 }

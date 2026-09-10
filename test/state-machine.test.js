@@ -32,6 +32,31 @@ test("task completion maps to completed", () => {
   assert.equal(stateFromJsonl({ payload: { type: "task_complete" } }), "completed");
 });
 
+test("permission and ask-user tools map to waiting", () => {
+  assert.equal(stateFromHookEvent("PermissionRequest"), "waiting");
+  assert.equal(stateFromHookEvent("PreToolUse", { tool_name: "AskUserQuestion" }), "waiting");
+  assert.equal(
+    stateFromJsonl({ payload: { type: "custom_tool_call", name: "request_user_input" } }),
+    "waiting",
+  );
+  assert.equal(
+    stateFromJsonl({ payload: { type: "item_started", item: { type: "McpToolCall", tool: "ask_user" } } }),
+    "waiting",
+  );
+});
+
+test("waiting for user input has priority over working and pinned tasks", () => {
+  const state = machine();
+  state.apply({ sessionId: "working-task", state: "working" });
+  state.setPinned("working-task");
+  state.apply({ sessionId: "waiting-task", state: "waiting" });
+
+  const snapshot = state.snapshot();
+  assert.equal(snapshot.state, "waiting");
+  assert.equal(snapshot.drivingId, "waiting-task");
+  assert.equal(snapshot.threads[0].state, "waiting");
+});
+
 test("working has priority over a newer completed activity", () => {
   const state = machine();
   state.apply({ sessionId: "working-task", state: "working" });
@@ -66,7 +91,7 @@ test("completed remains visible until no completed activity remains", () => {
   assert.equal(state.snapshot().state, "idle");
 });
 
-test("legacy runtime states collapse into the three presentation states", () => {
+test("legacy runtime states collapse into the presentation states", () => {
   const state = machine();
   state.apply({ sessionId: "legacy-thinking", state: "thinking" });
   assert.equal(state.snapshot().state, "working");

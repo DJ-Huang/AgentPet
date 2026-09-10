@@ -51,7 +51,7 @@
       saveEffectsFailed: "保存显示效果失败",
       saveScaleFailed: "保存缩放设置失败",
       generateMaskFailed: "生成 Mask 失败",
-      states: { idle: "空闲", working: "工作中", completed: "完成" },
+      states: { idle: "空闲", waiting: "等待确认", working: "工作中", completed: "完成" },
     },
     en: {
       title: "Desktop Pet Settings",
@@ -104,11 +104,11 @@
       saveEffectsFailed: "Failed to save visual effects",
       saveScaleFailed: "Failed to save scale setting",
       generateMaskFailed: "Failed to generate Mask",
-      states: { idle: "Idle", working: "Working", completed: "Done" },
+      states: { idle: "Idle", waiting: "Needs Input", working: "Working", completed: "Done" },
     },
   };
   const STATE_IDS = {};
-  const ORDER = ["idle", "working", "completed"];
+  const ORDER = ["idle", "waiting", "working", "completed"];
   const root = document.getElementById("states");
   const languageInput = document.getElementById("language");
   const scaleInput = document.getElementById("window-scale");

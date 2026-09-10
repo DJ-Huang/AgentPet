@@ -49,8 +49,9 @@ The pet appears as a transparent window near the bottom-right of your desktop. I
 
 ### Understanding states
 
-Hana uses three presentation states: `idle`, `working`, and `completed`.
+Hana uses four presentation states: `idle`, `waiting`, `working`, and `completed`.
 
+- `waiting` means an agent needs user input or confirmation. It has the highest priority, even over a pinned working task.
 - `working` has priority whenever any observed task is active.
 - `completed` remains visible while a task is still unread, so a finished task does not disappear before you notice it.
 - `idle` is used when no active or unread-completed task remains.
@@ -114,7 +115,7 @@ The **Agents** tab shows the integration status and configuration location for e
 
 ![Status video settings](docs/images/status-videos.png)
 
-The **Status Videos** tab controls the animations assigned to `Idle`, `Working`, and `Done` states.
+The **Status Videos** tab controls the animations assigned to `Idle`, `Needs Input`, `Working`, and `Done` states.
 
 1. Choose **Random** to pick a different clip after each completed loop, or select sequential playback when you want a fixed order.
 2. Select **Add Video** to add a clip to a state.
@@ -129,6 +130,7 @@ Open **Desktop Pet Settings** from the tray menu to configure clips for these st
 | State | Purpose |
 | --- | --- |
 | `idle` | Waiting and ambient moments |
+| `waiting` | User input or confirmation is required |
 | `working` | Focused work moments |
 | `completed` | Acknowledging completed work |
 

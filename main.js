@@ -69,7 +69,7 @@ const TEXT = {
     maskStartFailed: "无法启动 Mask 生成器",
     maskFailed: "Mask 生成失败",
     clipNotFound: "找不到要生成 Mask 的视频",
-    states: { idle: "空闲", working: "工作中", completed: "完成" },
+    states: { idle: "空闲", waiting: "等待确认", working: "工作中", completed: "完成" },
   },
   en: {
     noActivity: "No activity",
@@ -96,7 +96,7 @@ const TEXT = {
     maskStartFailed: "Unable to start the Mask generator",
     maskFailed: "Mask generation failed",
     clipNotFound: "The video selected for Mask generation could not be found",
-    states: { idle: "Idle", working: "Working", completed: "Done" },
+    states: { idle: "Idle", waiting: "Needs Input", working: "Working", completed: "Done" },
   },
 };
 
@@ -518,7 +518,7 @@ function rebuildTray() {
   const snap = machine.snapshot();
   const current = snap.state;
   const separator = language === "en" ? ": " : "：";
-  const states = ["idle", "working", "completed"];
+  const states = ["idle", "waiting", "working", "completed"];
   const sessionItems =
     snap.threads.length === 0
       ? [{ label: text("noActivity"), enabled: false }]
