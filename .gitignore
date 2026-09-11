@@ -32,3 +32,13 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+
+# Large video assets (keep local copies; do not track)
+assets/**/*.mp4
+assets/**/*.webm
+assets/**/*.mov
+assets/**/*.avi
+assets/**/*.mkv
+assets/**/*.m4v
+assets/**/*.flv
+assets/**/*.wmv
