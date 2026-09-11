@@ -189,8 +189,9 @@
     video.style.maskSize = maskSize;
     video.style.webkitMaskComposite = Array(Math.max(0, layers.length - 1)).fill("source-in").join(", ");
     video.style.maskComposite = Array(Math.max(0, layers.length - 1)).fill("intersect").join(", ");
-    video.style.setProperty("--overall-opacity", String(effects.overallOpacity / 100));
-    video.style.visibility = effects.overallOpacity === 0 ? "hidden" : "";
+    if (root) root.style.setProperty("--overall-opacity", String(effects.overallOpacity / 100));
+    video.style.removeProperty("--overall-opacity");
+    video.style.visibility = "";
   }
 
   function refreshVideoEffects() {

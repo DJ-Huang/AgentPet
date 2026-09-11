@@ -6,6 +6,7 @@ const {
   PetStateMachine,
   stateFromHookEvent,
   stateFromJsonl,
+  isPotentialMcpApprovalRecord,
 } = require("../lib/state-machine");
 
 const machines = [];
@@ -47,6 +48,22 @@ test("permission and ask-user tools map to waiting", () => {
     stateFromJsonl({ payload: { type: "item_started", item: { type: "McpToolCall", tool: "ask_user" } } }),
     "waiting",
   );
+});
+
+test("recognizes deferred MCP calls that may be waiting for desktop approval", () => {
+  assert.equal(isPotentialMcpApprovalRecord({
+    payload: {
+      type: "custom_tool_call",
+      name: "exec",
+      input: 'const result = await tools.mcp__tuanjie__read_console({ action: "clear" });',
+    },
+  }), true);
+  assert.equal(isPotentialMcpApprovalRecord({
+    payload: { type: "function_call", name: "mcp__tuanjie__read_console", input: "{}" },
+  }), true);
+  assert.equal(isPotentialMcpApprovalRecord({
+    payload: { type: "custom_tool_call", name: "exec", input: "await tools.exec_command({ cmd: 'npm test' })" },
+  }), false);
 });
 
 test("waiting for user input has priority over working and pinned tasks", () => {

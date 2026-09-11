@@ -19,6 +19,7 @@
         flex-direction: column;
         width: 100%;
         height: 100%;
+        opacity: var(--overall-opacity, 1);
       }
       #root.panel-above {
         flex-direction: column-reverse;
@@ -55,7 +56,7 @@
         mask-mode: alpha;
       }
       video.active {
-        opacity: var(--overall-opacity, 1);
+        opacity: 1;
       }
       #sessions {
         display: none;

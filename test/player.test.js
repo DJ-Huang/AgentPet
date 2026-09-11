@@ -35,9 +35,12 @@ class FakeElement {
     this.dataset = {};
     this.classList = new FakeClassList();
     this.listeners = new Map();
+    const properties = new Map();
     this.style = {
-      setProperty() {},
-      removeProperty() {},
+      properties,
+      setProperty(name, value) { properties.set(name, String(value)); },
+      removeProperty(name) { properties.delete(name); },
+      getPropertyValue(name) { return properties.get(name) || ""; },
     };
     this.src = "";
     this.readyState = 0;
@@ -92,7 +95,7 @@ class FakeElement {
   append() {}
 }
 
-function createPlayer({ pick, random = () => 0, threads = [] }) {
+function createPlayer({ pick, random = () => 0, threads = [], effects } = {}) {
   const elements = {
     root: new FakeElement(),
     "video-a": new FakeElement(),
@@ -160,6 +163,7 @@ function createPlayer({ pick, random = () => 0, threads = [] }) {
     threads,
     clips: { idle: { loop: true, pick } },
     files: { idle: ["file:///one.mp4", "file:///two.mp4", "file:///three.mp4"] },
+    effects,
   });
   return {
     videoA: elements["video-a"],
@@ -222,6 +226,13 @@ test("video visibility can switch the pet into list-only mode", () => {
   assert.equal(root.classList.contains("video-hidden"), true);
   videoVisibility({ visible: true });
   assert.equal(root.classList.contains("video-hidden"), false);
+});
+
+test("overall opacity is applied once to the whole pet including the activity panel", () => {
+  const { root, videoA, videoB } = createPlayer({ pick: "random", effects: { overallOpacity: 45 } });
+  assert.equal(root.style.getPropertyValue("--overall-opacity"), "0.45");
+  assert.equal(videoA.style.getPropertyValue("--overall-opacity"), "");
+  assert.equal(videoB.style.getPropertyValue("--overall-opacity"), "");
 });
 
 test("activity panel remains visible with an empty-state row when there are no sessions", () => {
